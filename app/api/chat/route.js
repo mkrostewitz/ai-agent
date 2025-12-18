@@ -87,7 +87,7 @@ export async function POST(req) {
 
     // Set up the AI model (Ollama) with specific configurations
     const model = new Ollama({
-      model: "llama3.1",
+      model: "phi3:mini",
       baseUrl: OLLAMA_BASE_URL || "http://localhost:11434",
       stream: true,
       temperature: 0.2,
