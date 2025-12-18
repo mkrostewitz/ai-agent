@@ -73,7 +73,7 @@ export async function POST(req) {
         score: cosineSimilarity(doc.embedding || [], queryEmbedding),
       }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+      .slice(0, 3);
 
     const context = scored
       .map(({doc}) => {
@@ -83,7 +83,16 @@ export async function POST(req) {
       .join("\n");
 
     const trimmedContext =
-      context.length > 4000 ? context.slice(0, 4000) : context;
+      context.length > 1500 ? context.slice(0, 1500) : context;
+
+    console.log(
+      "RAG: chunks=",
+      scored.length,
+      "contextChars=",
+      context.length,
+      "trimmedChars=",
+      trimmedContext.length
+    );
 
     // Set up the AI model (Ollama) with specific configurations
     const model = new Ollama({
@@ -112,29 +121,43 @@ Answer:`;
         let fullResponse = "";
         let buffer = "";
         let lastWord = "";
+        const genStart = Date.now();
         // Process the AI's response in chunks
 
         for await (const chunk of await model.stream(prompt)) {
           fullResponse += chunk;
           buffer += chunk;
-          // Split the buffer into words
-          // console.log(chunk);
-          const words = buffer.split(/\s+/);
-          // If we have 15 or more words, send them to the client
-          if (words.length >= 15) {
-            const completeWords = words.slice(0, -1).join(" ");
-            controller.enqueue(
-              new TextEncoder().encode(
-                JSON.stringify({
-                  text: completeWords,
-                  lastWord: lastWord,
-                })
-              )
-            );
-            // Keep the last word in the buffer
-
-            buffer = words[words.length - 1];
-            lastWord = completeWords.split(/\s+/).pop();
+          // Send everything up to the last whitespace to avoid splitting words
+          const boundaryMatch = buffer.match(/[\s\S]*\s/);
+          if (boundaryMatch && boundaryMatch[0].length > 0) {
+            const complete = boundaryMatch[0];
+            const wordCount = complete
+              .trim()
+              .split(/\s+/)
+              .filter(Boolean).length;
+            // Throttle sends: only flush when we have at least ~6 words
+            if (wordCount >= 6) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  JSON.stringify({
+                    text: complete,
+                  })
+                )
+              );
+              buffer = buffer.slice(complete.length);
+            }
+          } else {
+            // If there's no whitespace for a long time (very long token), flush to avoid stalling
+            if (buffer.length > 200) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  JSON.stringify({
+                    text: buffer,
+                  })
+                )
+              );
+              buffer = "";
+            }
           }
         }
         // Send any remaining content
@@ -152,6 +175,13 @@ Answer:`;
         }
         // Add the AI's full response to the chat history
         await mainChatMessageHistory.addMessage(new AIMessage(fullResponse));
+        const genMs = Date.now() - genStart;
+        console.log(
+          "Generation finished: ms=",
+          genMs,
+          "chars=",
+          fullResponse.length
+        );
         controller.close();
       },
     });
