@@ -1,98 +1,105 @@
-import "cheerio";
-import { TogetherAIEmbeddings } from "@langchain/community/embeddings/togetherai";
-import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { StringOutputParser } from "@langchain/core/output_parsers";
-import { PineconeStore } from "@langchain/pinecone";
-import { Pinecone as PineconeClient } from "@pinecone-database/pinecone";
+import {createStuffDocumentsChain} from "langchain/chains/combine_documents";
+import {ChatPromptTemplate} from "@langchain/core/prompts";
+import {ChatGoogleGenerativeAI} from "@langchain/google-genai";
+import {StringOutputParser} from "@langchain/core/output_parsers";
+import {OllamaEmbeddings} from "@langchain/ollama";
+import {MongoClient} from "mongodb";
+import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 export async function GET(req) {
-    try {
-        const pinecone = new PineconeClient();
-        const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
+  let client;
+  try {
+    const {
+      MONGODB_URI,
+      MONGODB_DB,
+      MONGODB_COLLECTION,
+      MONGODB_INDEX,
+      OLLAMA_BASE_URL,
+      GOOGLE_API_KEY,
+    } = process.env;
 
-        const embeddings = new TogetherAIEmbeddings({
-            model: "togethercomputer/m2-bert-80M-8k-retrieval", // Default value
-        });
+    if (!MONGODB_URI || !MONGODB_DB || !MONGODB_COLLECTION || !MONGODB_INDEX) {
+      return Response.json(
+        {
+          error:
+            "Missing Mongo config. Set MONGODB_URI, MONGODB_DB, MONGODB_COLLECTION, MONGODB_INDEX.",
+        },
+        {status: 500}
+      );
+    }
+    if (!GOOGLE_API_KEY) {
+      return Response.json(
+        {error: "Missing GOOGLE_API_KEY for the chat model."},
+        {status: 500}
+      );
+    }
 
-        const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
-            pineconeIndex,
-            // Maximum number of batch requests to allow at once. Each batch is 1000 vectors.
-            maxConcurrency: 5,
-        });
+    const url = new URL(req.url);
+    const question = url.searchParams.get("q") || "What is task decomposition?";
 
-        //handle the text splitting only once
-        /*         const loader = new CheerioWebBaseLoader(
-            "https://lilianweng.github.io/posts/2023-06-23-agent/"
-        );
-        const docs = await loader.load();
+    client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    const db = client.db(MONGODB_DB);
+    const collection = db.collection(MONGODB_COLLECTION);
 
-        const textSplitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 2000,
-            chunkOverlap: 200,
-        });
-        const splits = await textSplitter.splitDocuments(docs);
+    const embeddings = new OllamaEmbeddings({
+      model: "nomic-embed-text",
+      baseUrl: OLLAMA_BASE_URL || "http://localhost:11434",
+    });
 
-        const numberIds = generateNumberStrings(splits.length);
+    const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
+      collection,
+      indexName: MONGODB_INDEX,
+      textKey: "text",
+      embeddingKey: "embedding",
+    });
 
-        let saveToPinecone = await vectorStore.addDocuments(splits, {
-            ids: numberIds,
-        }); */
+    const retriever = vectorStore.asRetriever({
+      k: 15,
+    });
 
-        const retriever = vectorStore.asRetriever({
-            k: 15,
-        });
-
-        const prompt = ChatPromptTemplate.fromMessages([
-            [
-                "human",
-                `You are an assistant for question-answering tasks. 
+    const prompt = ChatPromptTemplate.fromMessages([
+      [
+        "human",
+        `You are an assistant for question-answering tasks. 
                     Use the following pieces of retrieved context to answer the question. 
                     If you don't know the answer, just say that you don't know.
                     Use three sentences maximum and keep the answer concise.
                     Question: {question} 
                     Context: {context} 
                     Answer:`,
-            ],
-        ]);
+      ],
+    ]);
 
-        const model = new ChatGoogleGenerativeAI({
-            model: "gemini-1.5-pro",
-            maxOutputTokens: 2048,
-            apiKey: process.env.GOOGLE_API_KEY,
-        });
+    const model = new ChatGoogleGenerativeAI({
+      model: "gemini-1.5-pro",
+      maxOutputTokens: 2048,
+      apiKey: GOOGLE_API_KEY,
+    });
 
-        const ragChain = await createStuffDocumentsChain({
-            llm: model,
-            prompt,
-            outputParser: new StringOutputParser(),
-        });
+    const ragChain = await createStuffDocumentsChain({
+      llm: model,
+      prompt,
+      outputParser: new StringOutputParser(),
+    });
 
-        const retrievedDocs = await retriever.invoke(
-            "what is task decomposition"
-        );
+    const retrievedDocs = await retriever.invoke(question);
 
-        let resutls = await ragChain.invoke({
-            question: "What is task decomposition?",
-            context: retrievedDocs,
-        });
+    let resutls = await ragChain.invoke({
+      question,
+      context: retrievedDocs,
+    });
 
-        return Response.json({ retrievedDocs, resutls });
-    } catch (error) {
-        console.error(error);
-        return Response.json(
-            { error: "Internal Server Error" },
-            { status: 500 }
-        );
+    return Response.json({retrievedDocs, resutls});
+  } catch (error) {
+    console.error(error);
+    return Response.json({error: "Internal Server Error"}, {status: 500});
+  } finally {
+    if (client) {
+      await client.close();
     }
-}
-
-function generateNumberStrings(arrayLength) {
-    return Array.from({ length: arrayLength }, (_, i) => (i + 1).toString());
+  }
 }
