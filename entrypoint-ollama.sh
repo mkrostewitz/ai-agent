@@ -7,8 +7,8 @@ pid=$!
 # Give the server a moment to start
 sleep 5
 
-echo "Ensuring model llama3.1 is available..."
-ollama pull llama3.1
+echo "Ensuring modelis available..."
+ollama pull phi3:mini
 ollama pull nomic-embed-text 
 echo "Models are ready."
 
