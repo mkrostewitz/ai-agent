@@ -1,0 +1,37 @@
+{
+  "pages": {
+    "ChatWidgetDemo": {
+      "title": "Chat Widget Demo",
+      "embedTitle": "Embed your chatbot",
+      "embedCopy": "Copy & paste this snippet before your closing </body> tag.",
+      "liveTitle": "Live preview",
+      "liveDescModal": "Launching demo widget in the bottom-right corner.",
+      "liveDescEmbedded": "Embedded widget shown inside this box.",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "missingNote": "Add ?agentId=YOUR_AGENT_ID to see your brand and live widget.",
+      "onlineAs": "Online as {{name}}",
+      "browserLanguage": "Browser Language"
+    },
+    "ChatWidget": {
+      "send": "Send",
+      "placeholder": "Type your message...",
+      "notConfigured": "This agent is not fully configured yet.",
+      "error": "Sorry, something went wrong. Please try again.",
+      "fallback": "I am here to help.",
+      "userTitle": "How can we reach you if we lose contact?",
+      "userSubtitle": "Share your details so we can follow up even if the chat is interrupted.",
+      "firstNameLabel": "First name",
+      "lastNameLabel": "Last name",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone (optional)",
+      "startChat": "Start chat",
+      "firstNameRequired": "First name is required.",
+      "lastNameRequired": "Last name is required.",
+      "emailRequired": "Email is required.",
+      "emailInvalid": "Email must be valid.",
+      "blockedPlaceholder": "Enter your details to start chatting",
+      "startNewConversation": "Start new conversation"
+    }
+  }
+}

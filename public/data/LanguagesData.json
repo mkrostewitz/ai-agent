@@ -1,0 +1,5 @@
+[
+  {"code": "en", "name": "English", "nativeName": "English", "supported": true},
+  {"code": "de", "name": "German", "nativeName": "Deutsch", "supported": true},
+  {"code": "it", "name": "Italian", "nativeName": "Italiano", "supported": true}
+]

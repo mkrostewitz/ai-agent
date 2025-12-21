@@ -1,0 +1,119 @@
+[
+  {
+    "name": "Arabic",
+    "nativeName": "العربية",
+    "code": "ar",
+    "flagCode": "sa"
+  },
+  {
+    "name": "Bengali",
+    "nativeName": "বাংলা",
+    "code": "bn",
+    "flagCode": "bd"
+  },
+  {
+    "name": "Chinese",
+    "nativeName": "中文 (Zhōngwén), 汉语, 漢語",
+    "code": "zh",
+    "flagCode": "cn"
+  },
+  {
+    "name": "English",
+    "nativeName": "English",
+    "code": "en",
+    "flagCode": "gb",
+    "supported": true
+  },
+  {
+    "name": "French",
+    "nativeName": "français, langue française",
+    "code": "fr",
+    "flagCode": "fr"
+  },
+  {
+    "name": "German",
+    "nativeName": "Deutsch",
+    "code": "de",
+    "flagCode": "de",
+    "supported": true
+  },
+  {
+    "name": "Hindi",
+    "nativeName": "हिन्दी, हिंदी",
+    "code": "hi",
+    "flagCode": "in"
+  },
+  {
+    "name": "Italian",
+    "nativeName": "Italiano",
+    "code": "it",
+    "flagCode": "it",
+    "supported": true
+  },
+  {
+    "name": "Japanese",
+    "nativeName": "日本語 (にほんご／にっぽんご)",
+    "code": "ja",
+    "flagCode": "jp"
+  },
+  {
+    "name": "Korean",
+    "nativeName": "한국어 (韓國語), 조선말 (朝鮮語)",
+    "code": "ko",
+    "flagCode": "kr"
+  },
+  {
+    "name": "Portuguese",
+    "nativeName": "Português (Portugal)",
+    "code": "pt",
+    "flagCode": "pt"
+  },
+  {
+    "name": "Portuguese (Brazil)",
+    "nativeName": "Português (Brasil)",
+    "code": "pt-BR",
+    "flagCode": "br"
+  },
+  {
+    "name": "Portuguese (Colombia)",
+    "nativeName": "Português (Colômbia)",
+    "code": "pt-CO",
+    "flagCode": "co"
+  },
+  {
+    "name": "Russian",
+    "nativeName": "русский язык",
+    "code": "ru",
+    "flagCode": "ru"
+  },
+  {
+    "name": "Spanish; Castilian",
+    "nativeName": "español, castellano",
+    "code": "es",
+    "flagCode": "es"
+  },
+  {
+    "name": "Spanish (Mexico)",
+    "nativeName": "español",
+    "code": "es-MX",
+    "flagCode": "mx"
+  },
+  {
+    "name": "Turkish",
+    "nativeName": "Türkçe",
+    "code": "tr",
+    "flagCode": "tr"
+  },
+  {
+    "name": "Urdu",
+    "nativeName": "اردو",
+    "code": "ur",
+    "flagCode": "pk"
+  },
+  {
+    "name": "Vietnamese",
+    "nativeName": "Tiếng Việt",
+    "code": "vi",
+    "flagCode": "vn"
+  }
+]

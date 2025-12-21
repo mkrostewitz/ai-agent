@@ -1,0 +1,9 @@
+[
+  {"name": "Switzerland", "code": "CH", "dialCode": "41"},
+  {"name": "Germany", "code": "DE", "dialCode": "49"},
+  {"name": "Austria", "code": "AT", "dialCode": "43"},
+  {"name": "Italy", "code": "IT", "dialCode": "39"},
+  {"name": "France", "code": "FR", "dialCode": "33"},
+  {"name": "United Kingdom", "code": "GB", "dialCode": "44"},
+  {"name": "United States", "code": "US", "dialCode": "1"}
+]

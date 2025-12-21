@@ -1,0 +1,37 @@
+{
+  "pages": {
+    "ChatWidgetDemo": {
+      "title": "Demo del widget di chat",
+      "embedTitle": "Incorpora il tuo chatbot",
+      "embedCopy": "Copia e incolla questo snippet prima del tag di chiusura </body>.",
+      "liveTitle": "Anteprima live",
+      "liveDescModal": "Il widget demo appare in basso a destra.",
+      "liveDescEmbedded": "Widget incorporato mostrato in questa area.",
+      "copy": "Copia",
+      "copied": "Copiato!",
+      "missingNote": "Aggiungi ?agentId=YOUR_AGENT_ID per vedere il tuo brand e il widget live.",
+      "onlineAs": "Online come {{name}}",
+      "browserLanguage": "Lingua del browser"
+    },
+    "ChatWidget": {
+      "send": "Invia",
+      "placeholder": "Scrivi il tuo messaggio...",
+      "notConfigured": "Questo agente non è ancora completamente configurato.",
+      "error": "Spiacente, si è verificato un errore. Riprova.",
+      "fallback": "Sono qui per aiutarti.",
+      "userTitle": "Come possiamo contattarti se perdiamo il contatto?",
+      "userSubtitle": "Condividi i tuoi dati così possiamo richiamarti se la chat si interrompe.",
+      "firstNameLabel": "Nome",
+      "lastNameLabel": "Cognome",
+      "emailLabel": "Email",
+      "phoneLabel": "Telefono (opzionale)",
+      "startChat": "Inizia chat",
+      "firstNameRequired": "Il nome è obbligatorio.",
+      "lastNameRequired": "Il cognome è obbligatorio.",
+      "emailRequired": "L'email è obbligatoria.",
+      "emailInvalid": "L'email deve essere valida.",
+      "blockedPlaceholder": "Inserisci i dati per iniziare",
+      "startNewConversation": "Avvia nuova conversazione"
+    }
+  }
+}

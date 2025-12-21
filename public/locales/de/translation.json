@@ -1,0 +1,37 @@
+{
+  "pages": {
+    "ChatWidgetDemo": {
+      "title": "Chat-Widget-Demo",
+      "embedTitle": "Chatbot einbetten",
+      "embedCopy": "Kopiere dieses Snippet vor dein schließendes </body>-Tag.",
+      "liveTitle": "Live-Vorschau",
+      "liveDescModal": "Das Demo-Widget erscheint unten rechts.",
+      "liveDescEmbedded": "Eingebettetes Widget wird in diesem Bereich gezeigt.",
+      "copy": "Kopieren",
+      "copied": "Kopiert!",
+      "missingNote": "Füge ?agentId=YOUR_AGENT_ID hinzu, um dein Branding und das Widget zu sehen.",
+      "onlineAs": "Online als {{name}}",
+      "browserLanguage": "Browsersprache"
+    },
+    "ChatWidget": {
+      "send": "Senden",
+      "placeholder": "Nachricht eingeben...",
+      "notConfigured": "Dieser Agent ist noch nicht vollständig konfiguriert.",
+      "error": "Entschuldigung, etwas ist schiefgelaufen. Bitte erneut versuchen.",
+      "fallback": "Ich helfe gerne weiter.",
+      "userTitle": "Wie können wir Sie erreichen, falls der Kontakt abbricht?",
+      "userSubtitle": "Teilen Sie Ihre Daten, damit wir nachfassen können, falls der Chat unterbrochen wird.",
+      "firstNameLabel": "Vorname",
+      "lastNameLabel": "Nachname",
+      "emailLabel": "E-Mail",
+      "phoneLabel": "Telefon (optional)",
+      "startChat": "Chat starten",
+      "firstNameRequired": "Vorname ist erforderlich.",
+      "lastNameRequired": "Nachname ist erforderlich.",
+      "emailRequired": "E-Mail ist erforderlich.",
+      "emailInvalid": "E-Mail muss gültig sein.",
+      "blockedPlaceholder": "Details eingeben, um zu starten",
+      "startNewConversation": "Neue Konversation starten"
+    }
+  }
+}
