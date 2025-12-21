@@ -19,6 +19,8 @@ services:
     image: mongo:8
     env_file:
       - .env.docker
+    ports:
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
