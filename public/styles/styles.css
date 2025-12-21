@@ -1,0 +1,192 @@
+.ExternalClass,
+.ExternalClass p,
+.ExternalClass span,
+.ExternalClass font,
+.ExternalClass td,
+.ExternalClass div {
+  line-height: 100%;
+}
+html {
+  width: 100%;
+  padding: 0;
+  background-color: #333333 !important;
+  color: #ffffff;
+}
+
+body {
+  -webkit-text-size-adjust: none;
+  -ms-text-size-adjust: none;
+  margin: 0;
+  padding: 0;
+  background-color: #333333 !important;
+}
+
+h1 {
+  font-family: inherit;
+  text-align: center;
+  color: #a8c957;
+}
+
+.content-text {
+  font-family: inherit;
+  font-size: 14px;
+  color: #ffffff;
+  line-height: 28px;
+}
+
+span,
+p {
+  color: #ffffff;
+}
+
+table {
+  border-spacing: 0;
+  table-layout: fixed;
+  margin: 0 auto;
+}
+
+table table table {
+  table-layout: auto;
+}
+
+.yshortcuts a {
+  border-bottom: none !important;
+}
+
+img:hover {
+  opacity: 0.9 !important;
+}
+
+a {
+  color: #a8c957 !important;
+  text-decoration: none;
+}
+
+.textbutton a {
+  font-family: inherit !important;
+}
+
+.btn-link a {
+  color: #ffffff !important;
+}
+
+/*Responsive*/
+@media only screen and (max-width: 640px) {
+  body {
+    margin: 0px;
+    width: auto !important;
+    font-family: inherit !important;
+  }
+
+  .table-inner {
+    width: 90% !important;
+    max-width: 90% !important;
+  }
+
+  .table-full {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .header-table {
+    height: 200px;
+  }
+}
+
+@media only screen and (max-width: 479px) {
+  body {
+    width: auto !important;
+    font-family: inherit !important;
+  }
+
+  .table-inner {
+    width: 90% !important;
+    max-width: 90% !important;
+  }
+
+  .table-full {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .header-table {
+    height: 250px;
+  }
+
+  /*gmail*/
+  u + .body .full {
+    width: 100% !important;
+    width: 100vw !important;
+  }
+}
+
+.mcnPreviewText {
+  display: none !important;
+}
+
+/*-----body-----*/
+.body {
+  background-color: #333333;
+  width: 100%;
+}
+
+/*@tab Body
+        @section Dot*/
+.dot {
+  background-color: #a8c957;
+}
+
+/*-----end body-----*/
+
+/*-----header-----*/
+.header-bg {
+  background-color: #333333;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  border-bottom: 5px solid #a8c957;
+}
+
+.header-table {
+  height: 350px;
+}
+
+/*-----end header-----*/
+
+/*-----panel-----*/
+/*@tab Panel
+        @section Background*/
+.panel {
+  /*@editable*/
+  background-color: #333333;
+}
+
+/*@tab Panel
+        @section Button*/
+.btn-link {
+  /*@editable*/
+  background-color: #a8c957;
+  border-radius: 30px;
+}
+
+/*-----end panel-----*/
+
+/*-----3/3 content-----*/
+/*@tab 3-3 Content
+        @section Background*/
+.panel-2 {
+  /*@editable*/
+  background-color: #ffffff;
+}
+
+/*-----end 3/3 content-----*/
+
+/*-----footer-----*/
+/*@tab footer
+        @section Background*/
+.footer {
+  background-color: #333333;
+  border-top: 3px solid #a8c957;
+}
+
+/*-----end footer-----*/

@@ -1,0 +1,14 @@
+.table {
+    width: 80%;
+    align-content: center;
+}
+
+.bodyRow {
+    border-bottom: 5px solid #A8C957 !important;
+    border-bottom: 2px dashed #FFFFFF;
+}
+
+.headerRow {
+    background-color: #A8C957;
+    color: #333333;
+}
