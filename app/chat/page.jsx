@@ -6,14 +6,7 @@ import {Prism as SyntaxHighlighter} from "react-syntax-highlighter";
 import {vscDarkPlus} from "react-syntax-highlighter/dist/esm/styles/prism";
 import {motion, AnimatePresence} from "framer-motion";
 import {FiSend, FiUser, FiCpu} from "react-icons/fi";
-
-// Default chat options for quick start
-const defaultOptions = [
-  "Tell me about the latest AI advancements",
-  "Explain quantum computing",
-  "What are the best practices in cybersecurity?",
-  "How does blockchain technology work?",
-];
+import {useI18n} from "../i18n/useI18n";
 
 // Markdown component to render formatted text
 const Markdown = ({content}) => {
@@ -95,6 +88,9 @@ const ChatStream = () => {
   const [chatStarted, setChatStarted] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [defaultOptions, setDefaultOptions] = useState([]);
+  const [isLoadingDefaults, setIsLoadingDefaults] = useState(true);
+  const {t, i18n, lang, supportedLocales, fallbackLocale} = useI18n();
   const typingQueueRef = useRef([]);
   const chatContainerRef = useRef(null);
 
@@ -105,6 +101,37 @@ const ChatStream = () => {
         chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadDefaultQuestions = async () => {
+      setIsLoadingDefaults(true);
+      try {
+        const locale = encodeURIComponent(lang || fallbackLocale);
+        const res = await fetch(`/api/default-questions?locale=${locale}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch defaults: ${res.status}`);
+        }
+        const data = await res.json();
+        const questions = Array.isArray(data?.questions)
+          ? data.questions
+              .map((q) => (typeof q === "string" ? q.trim() : ""))
+              .filter(Boolean)
+          : [];
+        setDefaultOptions(questions.length ? questions : []);
+      } catch (err) {
+        console.error("Failed to load default questions:", err);
+        setDefaultOptions([]);
+      } finally {
+        setIsLoadingDefaults(false);
+      }
+    };
+
+    loadDefaultQuestions();
+    return () => controller.abort();
+  }, [lang, fallbackLocale]);
 
   // Handle form submission
   const handleSubmit = async (e) => {
@@ -255,6 +282,22 @@ const ChatStream = () => {
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-950 text-gray-100">
       <div className="w-full md:w-4/5 lg:w-3/5 flex flex-col h-screen">
+        <div className="flex justify-end px-6 pt-4">
+          <label className="flex items-center space-x-2 text-sm text-gray-300">
+            <span>{t("chat.languageLabel")}</span>
+            <select
+              value={lang}
+              onChange={(e) => i18n.changeLanguage(e.target.value)}
+              className="bg-gray-800 text-gray-100 border border-gray-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {supportedLocales.map((locale) => (
+                <option key={locale} value={locale}>
+                  {t(`languages.${locale}`) || locale.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {/* Chat messages container */}
         <div
           ref={chatContainerRef}
@@ -284,7 +327,7 @@ const ChatStream = () => {
                       message.type === "user"
                         ? "bg-indigo-600 p-4"
                         : "bg-gray-800 p-4"
-                    } flex items-start`}
+                    } flex items-center`}
                   >
                     <div className="mr-3 mt-1">
                       {message.type === "user" ? (
@@ -320,17 +363,27 @@ const ChatStream = () => {
           {/* Display default options if chat hasn't started */}
           {!chatStarted && (
             <div className="grid grid-cols-2 gap-4 mb-6">
-              {defaultOptions.map((option, index) => (
-                <motion.button
-                  key={index}
-                  whileHover={{scale: 1.05}}
-                  whileTap={{scale: 0.95}}
-                  onClick={() => startChat(option)}
-                  className="p-4 bg-gray-800 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium shadow-md"
-                >
-                  {option}
-                </motion.button>
-              ))}
+              {isLoadingDefaults ? (
+                <div className="col-span-2 text-center text-sm text-gray-400">
+                  {t("chat.loadingSuggestions")}
+                </div>
+              ) : defaultOptions.length > 0 ? (
+                defaultOptions.map((option, index) => (
+                  <motion.button
+                    key={`${option}-${index}`}
+                    whileHover={{scale: 1.05}}
+                    whileTap={{scale: 0.95}}
+                    onClick={() => startChat(option)}
+                    className="p-4 bg-gray-800 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium shadow-md"
+                  >
+                    {option}
+                  </motion.button>
+                ))
+              ) : (
+                <div className="col-span-2 text-center text-sm text-gray-400">
+                  {t("chat.noSuggestions")}
+                </div>
+              )}
             </div>
           )}
           {/* Chat input form */}
@@ -340,7 +393,7 @@ const ChatStream = () => {
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question"
+              placeholder={t("chat.placeholder")}
               className="flex-grow p-4 rounded-l-xl bg-gray-800 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-700 shadow-inner"
             />
             <motion.button
