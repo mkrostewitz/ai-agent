@@ -74,16 +74,21 @@ export async function POST(req) {
     const {
       MONGODB_URI,
       MONGODB_DB,
-      MONGODB_COLLECTION,
+      MONGODB_DEFAULT_EMBEDDING_COLLECTION,
       MONGODB_INDEX,
       OLLAMA_BASE_URL,
     } = process.env;
 
-    if (!MONGODB_URI || !MONGODB_DB || !MONGODB_COLLECTION || !MONGODB_INDEX) {
+    if (
+      !MONGODB_URI ||
+      !MONGODB_DB ||
+      !MONGODB_DEFAULT_EMBEDDING_COLLECTION ||
+      !MONGODB_INDEX
+    ) {
       return NextResponse.json(
         {
           error:
-            "Missing MongoDB config. Set MONGODB_URI, MONGODB_DB, MONGODB_COLLECTION, MONGODB_INDEX.",
+            "Missing MongoDB config. Set MONGODB_URI, MONGODB_DB, MONGODB_DEFAULT_EMBEDDING_COLLECTION, MONGODB_INDEX.",
         },
         {status: 500}
       );
@@ -93,7 +98,7 @@ export async function POST(req) {
     client = new MongoClient(MONGODB_URI);
     await client.connect();
     const db = client.db(MONGODB_DB);
-    const collection = db.collection(MONGODB_COLLECTION);
+    const collection = db.collection(MONGODB_DEFAULT_EMBEDDING_COLLECTION);
 
     const embeddings = new OllamaEmbeddings({
       model: "nomic-embed-text",
