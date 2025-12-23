@@ -140,86 +140,102 @@ const ChatStream = () => {
     await startChat(question);
   };
 
-  // Start or continue the chat
+  // Start or continue the chat (uses /api/agents/chat/stream SSE)
   const startChat = async (initialQuestion) => {
-    // Update state and prepare for chat
     setChatStarted(true);
     setQuestion("");
     setIsThinking(true);
 
+    // Build payload messages (include prior turns + current user question)
+    const payloadMessages = [...messages, {type: "user", content: initialQuestion}]
+      .filter((m) => m.type === "user" || m.type === "ai")
+      .map((m) => ({
+        role: m.type === "ai" ? "assistant" : "user",
+        content: m.content,
+      }));
+
+    // Optimistically add user + empty AI message to UI
     setMessages((prev) => [
       ...prev,
       {type: "user", content: initialQuestion},
       {type: "ai", content: ""},
     ]);
 
-    console.log("messages after user input:", messages);
-
     try {
-      // Send request to chat API
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/agents/chat/stream", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({question: initialQuestion}),
+        body: JSON.stringify({messages: payloadMessages}),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Try to read non-stream JSON fallback
+        const data = await response.json().catch(() => ({}));
+        const reply =
+          data?.choices?.[0]?.message?.content ||
+          data?.data?.choices?.[0]?.message?.content ||
+          data?.message ||
+          "An error occurred while processing your request.";
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (updated[lastIndex]?.type === "ai") {
+            updated[lastIndex] = {...updated[lastIndex], content: reply};
+          }
+          return updated;
+        });
+        setIsThinking(false);
+        return;
       }
 
-      // Handle the streaming response
-      const reader = response.body.getReader();
+      const reader = response.body?.getReader?.();
+      if (!reader) {
+        setIsThinking(false);
+        return;
+      }
+
       const decoder = new TextDecoder();
-
-      let lastWord = "";
+      let buffer = "";
       let receivedFirstChunk = false;
+      let streamDone = false;
 
-      // Read the stream chunk by chunk
       while (true) {
         const {done, value} = await reader.read();
         if (done) break;
-
-        const chunk = decoder.decode(value);
-        const {text, lastWord: newLastWord, isLast} = JSON.parse(chunk);
-
-        // Remove duplicated trailing words between chunks before we start typing
-        let shouldPrefixSpace = false;
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage?.type === "ai") {
-            const trimmed = lastMessage.content.trimEnd();
-            if (lastWord && trimmed.endsWith(lastWord)) {
-              lastMessage.content = trimmed
-                .slice(0, -lastWord.length)
-                .trimEnd();
+        buffer += decoder.decode(value, {stream: true});
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        parts.forEach((part) => {
+          const dataLine = part.split("\n").find((l) => l.startsWith("data:"));
+          if (!dataLine) return;
+          const payload = dataLine.replace(/^data:\s*/, "");
+          if (payload === "[DONE]") {
+            streamDone = true;
+            return;
+          }
+          let delta = "";
+          try {
+            const parsed = JSON.parse(payload);
+            delta =
+              parsed?.choices?.[0]?.delta?.content ||
+              parsed?.choices?.[0]?.message?.content ||
+              "";
+          } catch {
+            delta = payload;
+          }
+          if (delta) {
+            typingQueueRef.current.push(...delta);
+            if (!isTyping) setIsTyping(true);
+            if (!receivedFirstChunk) {
+              setIsThinking(false);
+              receivedFirstChunk = true;
             }
-            shouldPrefixSpace = lastMessage.content.length > 0;
           }
-          return newMessages;
         });
-
-        // Queue up text for the typewriter effect
-        if (text) {
-          const textToType = `${shouldPrefixSpace ? " " : ""}${text}`;
-          typingQueueRef.current.push(...textToType);
-          if (!isTyping) {
-            setIsTyping(true);
-          }
-        }
-
-        if (!receivedFirstChunk) {
-          setIsThinking(false);
-          receivedFirstChunk = true;
-        }
-
-        lastWord = newLastWord;
-
-        if (isLast) break;
+        if (streamDone) break;
       }
       setIsThinking(false);
     } catch (error) {
-      // Handle errors
       console.error("Error in chat:", error);
       setMessages((prev) => [
         ...prev,
@@ -282,22 +298,6 @@ const ChatStream = () => {
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-950 text-gray-100">
       <div className="w-full md:w-4/5 lg:w-3/5 flex flex-col h-screen">
-        <div className="flex justify-end px-6 pt-4">
-          <label className="flex items-center space-x-2 text-sm text-gray-300">
-            <span>{t("chat.languageLabel")}</span>
-            <select
-              value={lang}
-              onChange={(e) => i18n.changeLanguage(e.target.value)}
-              className="bg-gray-800 text-gray-100 border border-gray-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {supportedLocales.map((locale) => (
-                <option key={locale} value={locale}>
-                  {t(`languages.${locale}`) || locale.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
         {/* Chat messages container */}
         <div
           ref={chatContainerRef}
