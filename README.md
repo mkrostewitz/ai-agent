@@ -47,9 +47,6 @@ Visit `http://localhost:3000`.
 - `GET /api/agents/conversations/details?conversation_id=...`  
   Returns stored messages, metadata, and user for a conversation.
 
-- `POST /api/chat`  
-  Legacy in-app chat endpoint used by `app/chat/page.jsx` (streams JSON chunks for the internal UI).
-
 ## Widget & Demo
 - `public/scripts/chat-widget.js`: embeddable widget that:
   - Fetches chatbot details from `/api/agents/details`.
@@ -65,4 +62,3 @@ Visit `http://localhost:3000`.
 ## Running Notes
 - Widget avatar defaults to `/avatars/Michael_Intro.mp4`; can be overridden via Mongo `chatbot.avatar` or `data-avatar`.
 - Conversation cookie: `intu_chat_conversation` stores `conversation_id`, `lang` (unless forced by `data-lang`), and user details for continuity.
-
