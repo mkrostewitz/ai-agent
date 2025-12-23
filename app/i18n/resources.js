@@ -4,7 +4,6 @@ const resources = {
       chat: {
         placeholder: "Ask a question",
         loadingSuggestions: "Loading suggestions...",
-        noSuggestions: "No suggestions available.",
         languageLabel: "Language",
       },
       ChatWidgetDemo: {
@@ -32,7 +31,6 @@ const resources = {
       chat: {
         placeholder: "Stell eine Frage",
         loadingSuggestions: "Vorschläge werden geladen...",
-        noSuggestions: "Keine Vorschläge verfügbar.",
         languageLabel: "Sprache",
       },
       ChatWidgetDemo: {

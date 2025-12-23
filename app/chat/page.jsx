@@ -147,7 +147,10 @@ const ChatStream = () => {
     setIsThinking(true);
 
     // Build payload messages (include prior turns + current user question)
-    const payloadMessages = [...messages, {type: "user", content: initialQuestion}]
+    const payloadMessages = [
+      ...messages,
+      {type: "user", content: initialQuestion},
+    ]
       .filter((m) => m.type === "user" || m.type === "ai")
       .map((m) => ({
         role: m.type === "ai" ? "assistant" : "user",
@@ -379,11 +382,7 @@ const ChatStream = () => {
                     {option}
                   </motion.button>
                 ))
-              ) : (
-                <div className="col-span-2 text-center text-sm text-gray-400">
-                  {t("chat.noSuggestions")}
-                </div>
-              )}
+              ) : null}
             </div>
           )}
           {/* Chat input form */}
