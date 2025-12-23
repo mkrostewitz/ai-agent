@@ -5,7 +5,7 @@ import {OllamaEmbeddings} from "@langchain/ollama";
 import {MongoClient} from "mongodb";
 import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
 import {Document} from "langchain/document";
-import {embedRequestSchema} from "./validation";
+import {embedRequestSchema} from "../validation";
 import normalizeText from "@/app/helpers/normalizeText";
 import buildIds from "@/app/helpers/buildIds";
 

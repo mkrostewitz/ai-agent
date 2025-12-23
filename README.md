@@ -47,6 +47,12 @@ Visit `http://localhost:3000`.
 - `GET /api/agents/conversations/details?conversation_id=...`  
   Returns stored messages, metadata, and user for a conversation.
 
+- `POST /api/embed`  
+  Embed PDF uploads into MongoDB vector store (multipart or base64) with chunking.
+
+- `POST /api/embed/url`  
+  Fetches and embeds website text (http/https URL) into the same vector store. Body: `{ url: "https://...", namespace? }` or `{ urls: ["..."], namespace? }`.
+
 ## Widget & Demo
 - `public/scripts/chat-widget.js`: embeddable widget that:
   - Fetches chatbot details from `/api/agents/details`.
