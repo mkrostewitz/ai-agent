@@ -70,6 +70,128 @@ if (!appDb.getUser(appUser)) {
   appDb.updateUser(appUser, {pwd: appPass});
   print(`App user ${appUser} already exists on ${appDbName}; password updated`);
 }
+
+const defaultQuestionsCollection = env.MONGODB_DEFAULT_QUESTIONS_COLLECTION || "defaultQuestions";
+const chatbotCollection = env.MONGODB_CHATBOT_COLLECTION || "chatbot";
+const settingsCollection = env.MONGODB_SETTINGS_COLLECTION || "settings";
+const fallbackLocale = env.I18N_FALLBACK_LOCALE || "en";
+const seedDefaults = [
+  {
+    order: 1,
+    translations: {
+      en: "Tell me more about your background?",
+      de: "Erzähl mir mehr über deinen Hintergrund.",
+    },
+  },
+  {
+    order: 2,
+    translations: {
+      en: "How can you help my Company?",
+      de: "Wie kannst du meinem Unternehmen helfen?",
+    },
+  },
+  {
+    order: 3,
+    translations: {
+      en: "What markets & industries you are fond of?",
+      de: "Für welche Märkte und Branchen interessierst du dich?",
+    },
+  },
+  {
+    order: 4,
+    translations: {
+      en: "How do you engage?",
+      de: "Wie gehst du vor?",
+    },
+  },
+];
+
+const defaultsCol = appDb.getCollection(defaultQuestionsCollection);
+const defaultsCount = defaultsCol.estimatedDocumentCount();
+
+if (defaultsCount === 0) {
+  defaultsCol.insertMany(
+    seedDefaults.map((item) => ({
+      ...item,
+      active: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+  );
+  print(`Seeded ${seedDefaults.length} default questions into ${defaultQuestionsCollection}`);
+} else {
+  let migrated = 0;
+  defaultsCol
+    .find({translations: {$exists: false}, question: {$type: "string"}})
+    .forEach((doc) => {
+      const translations = {};
+      translations[fallbackLocale] = doc.question;
+      defaultsCol.updateOne(
+        {_id: doc._id},
+        {
+          $set: {
+            translations,
+            active: doc.active !== false,
+            updatedAt: new Date(),
+          },
+          $unset: {question: ""},
+        }
+      );
+      migrated += 1;
+    });
+  print(
+    `Default questions collection ${defaultQuestionsCollection} already has ${defaultsCount} documents; migrated ${migrated} to translations format if needed.`
+  );
+}
+
+// Seed chatbot collection with a single default bot if empty
+const chatbotCol = appDb.getCollection(chatbotCollection);
+const chatbotCount = chatbotCol.estimatedDocumentCount();
+if (chatbotCount === 0) {
+  chatbotCol.insertOne({
+    _id: ObjectId("6945708d17667ce0fa13e361"),
+    name: "Friendly Bot",
+    avatar: "/avatars/Emily_Intro.mp4",
+    primary_color: "#6e26f5",
+    secondary_color: "#0e273d",
+    button_color: "#6e26f5",
+    greeting: [
+      {lang: "en", text: "Hi there!"},
+      {lang: "de", text: "Hallo!"},
+      {lang: "it", text: "Ciao!"},
+    ],
+    starting_message: [
+      {lang: "en", text: "How can I help today?"},
+      {lang: "de", text: "Wie kann ich heute helfen?"},
+      {lang: "it", text: "Come posso aiutarti oggi?"},
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  print(`Seeded default chatbot into ${chatbotCollection}`);
+} else {
+  print(`Chatbot collection ${chatbotCollection} already has ${chatbotCount} document(s); no seed inserted.`);
+}
+
+// Seed settings collection with defaults if empty
+const settingsCol = appDb.getCollection(settingsCollection);
+const settingsCount = settingsCol.estimatedDocumentCount();
+if (settingsCount === 0) {
+  settingsCol.insertOne({
+    instruction:
+      "You are a replica of me, Mathias Krostewitz answering questions about Mathias Krostewitz using the supplied CV context.\n- Use only the provided context; if the answer is not there, say you don't know.\n- Respond in 1-2 sentences, natural wording, no bullet lists.",
+    model: env.OLLAMA_MODEL || "phi3:mini",
+    temperature: 0.2,
+    max_tokens: 2000,
+    top_k: 40,
+    top_p: 0.9,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  print(`Seeded default settings into ${settingsCollection}`);
+} else {
+  print(`Settings collection ${settingsCollection} already has ${settingsCount} document(s); no seed inserted.`);
+}
 JS
 }
 
