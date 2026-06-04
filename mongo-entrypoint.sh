@@ -179,7 +179,7 @@ const settingsCount = settingsCol.estimatedDocumentCount();
 if (settingsCount === 0) {
   settingsCol.insertOne({
     instruction:
-      "You are a replica of me, Mathias Krostewitz answering questions about Mathias Krostewitz using the supplied CV context.\n- Use only the provided context; if the answer is not there, say you don't know.\n- Respond in 1-2 sentences, natural wording, no bullet lists.",
+      "Answer as a professional personal assistant for the person configured during setup.\n- Use uploaded CVs, resumes, and indexed website data as the source of truth.\n- For background and career questions, lead with the most recent or current positions before older history.\n- Use only the provided context; if the answer is not there, say you don't know.\n- Respond in 1-2 sentences with natural, professional wording.",
     model: env.OLLAMA_MODEL || "phi3:mini",
     temperature: 0.2,
     max_tokens: 2000,

@@ -1,6 +1,9 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const CHATBOT_COLLECTION =
   process.env.MONGODB_CHATBOT_COLLECTION || "chatbot";
 
@@ -18,6 +21,7 @@ export async function GET() {
 
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/agents/details");
 
     const db = client.db(MONGODB_DB);
     const collection = db.collection(CHATBOT_COLLECTION);

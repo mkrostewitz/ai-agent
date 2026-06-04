@@ -1,5 +1,6 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
+import {getRequestTracking} from "@/app/lib/requestGeo";
 
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
@@ -23,6 +24,7 @@ export async function PUT(req) {
     const user = body?.user || null;
     const metadata = body?.metadata || {};
     const source = body?.source || "widget";
+    const tracking = await getRequestTracking(req);
 
     if (!conversationId) {
       return NextResponse.json(
@@ -33,16 +35,29 @@ export async function PUT(req) {
 
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/agents/conversations/update");
     const db = client.db(MONGODB_DB);
     const collection = db.collection(CONVERSATIONS_COLLECTION);
 
     const update = {
       $set: {
-        metadata,
+        metadata: {
+          ...metadata,
+          tracking: metadata?.tracking || tracking,
+        },
         source,
         updated_at: new Date(),
       },
     };
+
+    if (
+      tracking.ip ||
+      tracking.country ||
+      tracking.countryCode ||
+      tracking.city
+    ) {
+      update.$set.tracking = tracking;
+    }
 
     if (user) {
       update.$set.user = user;

@@ -688,138 +688,17 @@
     if (state.hasStarted || state.introInProgress || !userPayload) {
       return;
     }
-    const composedName = [userPayload.first_name, userPayload.last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
-    const introSystemMessage = [
-      "You are the assistant for this chat.",
-      composedName ? `Visitor name: ${composedName}` : null,
-      userPayload.email ? `Visitor email: ${userPayload.email}` : null,
-      userPayload.phone ? `Visitor phone: ${userPayload.phone}` : null,
-      "Greet the visitor warmly, keep it short and friendly.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const introUserPrompt = [
-      "Please greet the visitor by their first name",
-      composedName ? `(${composedName})` : "",
-      "in their language and ask how you can help.",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    const firstName = (userPayload.first_name || "").trim();
+    const openingTemplate = (state.starting || state.greeting || "").trim();
+    const opening = openingTemplate.replace(/\{\{\s*first_name\s*\}\}/gi, firstName);
 
     state.introInProgress = true;
-    state.typing = true;
-    renderMessages();
-
-    let assistantIndex = null;
-    let gotChunk = false;
-    let buffer = "";
-    const decoder = new TextDecoder();
-
-    function commitChunk(chunkText) {
-      if (!chunkText) return;
-      if (!gotChunk) {
-        gotChunk = true;
-        state.typing = false;
-      }
-      if (assistantIndex === null) {
-        state.conversation.push({role: "assistant", content: chunkText});
-        assistantIndex = state.conversation.length - 1;
-      } else {
-        state.conversation[assistantIndex].content += chunkText;
-      }
-      renderMessages();
-    }
-
     try {
-      console.log("[chat-widget] starting intro conversation");
-      const res = await fetch(host + "/api/agents/chat/stream", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content: introSystemMessage,
-            },
-            {
-              role: "user",
-              content: introUserPrompt,
-            },
-          ],
-        }),
-      });
-
-      if (!res.ok || !res.body || !res.body.getReader) {
-        const data = await res.json().catch(() => ({}));
-        const reply =
-          data?.data?.choices?.[0]?.message?.content ||
-          data?.choices?.[0]?.message?.content ||
-          data?.data?.message ||
-          data?.message ||
-          t("fallback");
-        commitChunk(reply);
-      } else {
-        const reader = res.body.getReader();
-        let streamDone = false;
-
-        state.typing = true;
-        renderMessages();
-
-        while (true) {
-          const {done, value} = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, {stream: true});
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop();
-          parts.forEach((part) => {
-            const dataLine = part
-              .split("\n")
-              .find((l) => l.startsWith("data:"));
-            if (!dataLine) return;
-            const payload = dataLine.replace(/^data:\s*/, "");
-            if (payload === "[DONE]") {
-              streamDone = true;
-              return;
-            }
-            try {
-              const parsed = JSON.parse(payload);
-              const delta =
-                parsed?.choices?.[0]?.delta?.content ||
-                parsed?.choices?.[0]?.message?.content ||
-                "";
-              commitChunk(delta);
-            } catch (_) {
-              commitChunk(payload);
-            }
-          });
-          if (streamDone) break;
-        }
-      }
-
-      state.typing = false;
-      renderMessages();
-      if (!gotChunk) {
-        state.conversation.push({role: "assistant", content: t("fallback")});
-        assistantIndex = state.conversation.length - 1;
-        renderMessages();
-      }
+      const intro = opening || t("fallback");
+      state.conversation.push({role: "assistant", content: intro});
       state.hasStarted = true;
-      if (assistantIndex !== null) {
-        persistConversation([
-          {
-            role: "assistant",
-            content: state.conversation[assistantIndex].content,
-          },
-        ]);
-      }
-    } catch (e) {
-      state.typing = false;
       renderMessages();
+      persistConversation([{role: "assistant", content: intro}]);
     } finally {
       state.introInProgress = false;
       updateInputAvailability();
@@ -1139,6 +1018,7 @@
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
+          lang: state.lang,
           messages: state.conversation.map(function (m) {
             return {
               role: m.role === "assistant" ? "assistant" : "user",

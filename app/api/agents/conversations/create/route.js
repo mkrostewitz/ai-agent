@@ -1,6 +1,7 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 import {randomUUID} from "crypto";
+import {getRequestTracking} from "@/app/lib/requestGeo";
 
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
@@ -23,12 +24,14 @@ export async function POST(req) {
     const user = body?.user || null;
     const metadata = body?.metadata || {};
     const source = body?.source || "widget";
+    const tracking = await getRequestTracking(req);
 
     const conversationId = randomUUID();
     const now = new Date();
 
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/agents/conversations/create");
     const db = client.db(MONGODB_DB);
     const collection = db.collection(CONVERSATIONS_COLLECTION);
 
@@ -39,8 +42,13 @@ export async function POST(req) {
         message: typeof m?.message === "string" ? m.message : "",
       })),
       user,
-      metadata,
+      metadata: {
+        ...metadata,
+        tracking: metadata?.tracking || tracking,
+      },
+      tracking,
       source,
+      status: "open",
       created_at: now,
       updated_at: now,
     });

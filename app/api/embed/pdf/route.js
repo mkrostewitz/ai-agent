@@ -8,11 +8,18 @@ import {Document} from "langchain/document";
 import {embedRequestSchema} from "../validation";
 import normalizeText from "@/app/helpers/normalizeText";
 import buildIds from "@/app/helpers/buildIds";
+import {requireAdminApi} from "@/app/lib/adminAuth";
 
 const DEFAULT_CHUNK_SIZE = 500;
 const DEFAULT_CHUNK_OVERLAP = 80;
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(req) {
+  const auth = await requireAdminApi(req);
+  if (auth.error) return auth.error;
+
   let client;
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -97,6 +104,7 @@ export async function POST(req) {
     // Init MongoDB + embeddings
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/embed/pdf");
     const db = client.db(MONGODB_DB);
     const collection = db.collection(MONGODB_DEFAULT_EMBEDDING_COLLECTION);
 

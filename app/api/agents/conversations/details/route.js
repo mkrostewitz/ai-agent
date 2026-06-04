@@ -1,6 +1,9 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
 
@@ -26,6 +29,7 @@ export async function GET(req) {
 
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/agents/conversations/details");
     const db = client.db(MONGODB_DB);
     const collection = db.collection(CONVERSATIONS_COLLECTION);
 

@@ -1,41 +1,531 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 import {Ollama} from "@langchain/ollama";
+import {OllamaEmbeddings} from "@langchain/ollama";
+import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
 
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "phi3:mini";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const SETTINGS_COLLECTION =
   process.env.MONGODB_SETTINGS_COLLECTION || "settings";
+const USERS_COLLECTION = process.env.MONGODB_USERS_COLLECTION || "users";
+const EMBEDDINGS_COLLECTION =
+  process.env.MONGODB_DEFAULT_EMBEDDING_COLLECTION ||
+  process.env.MONGODB_COLLECTION ||
+  "embeddings";
+const VECTOR_INDEX = process.env.MONGODB_INDEX || "vector_index";
+const DEFAULT_RETRIEVAL_K = Number(process.env.RAG_TOP_K || 6);
+const CURRENT_YEAR = new Date().getFullYear();
 
-function buildPrompt(messages = [], instruction) {
-  const header = instruction
-    ? `${instruction.trim()}\n\n`
-    : "You are a helpful assistant.\n\n";
-  const pairs = messages
-    .map((m) => {
-      const role = m?.role === "assistant" ? "Assistant" : "User";
-      const content = typeof m?.content === "string" ? m.content : "";
-      return `${role}: ${content}`;
-    })
-    .join("\n");
-  return `${header}${pairs}\nAssistant:`;
+function cleanString(value) {
+  return String(value || "").trim();
 }
 
-async function loadSettings() {
+function normalizeOwnerProfile(user) {
+  if (!user) return null;
+
+  const firstName = cleanString(user.firstName);
+  const lastName = cleanString(user.lastName);
+  const fullName =
+    cleanString(user.name) ||
+    [firstName, lastName].filter(Boolean).join(" ") ||
+    cleanString(user.email);
+
+  if (!fullName) return null;
+
+  return {
+    firstName,
+    lastName,
+    fullName,
+  };
+}
+
+function buildStandardInstruction(profile, instruction) {
+  const configuredName = profile?.fullName || "the configured person";
+  const firstNameLine = profile?.firstName
+    ? `- First name: ${profile.firstName}`
+    : "";
+  const lastNameLine = profile?.lastName
+    ? `- Last name: ${profile.lastName}`
+    : "";
+  const adminInstruction =
+    typeof instruction === "string" && instruction.trim()
+      ? [
+          "",
+          "Additional administrator instructions:",
+          instruction.trim(),
+          "",
+          "Apply the additional administrator instructions only when they do not conflict with the configured person or the source-context rules above.",
+        ].join("\n")
+      : "";
+
+  return [
+    `You are the professional personal assistant for ${configuredName}.`,
+    "Represent the configured person using the first and last name captured during setup.",
+    "Configured person:",
+    `- Full name: ${configuredName}`,
+    firstNameLine,
+    lastNameLine,
+    "",
+    "Use uploaded CVs, resumes, and indexed website data as the source of truth for the person's professional background.",
+    "For background, career, current-role, and experience questions, lead with the most recent or current positions, especially date ranges marked Present/current/latest or the newest years in the context.",
+    "Mention older positions only when they are directly relevant, useful as brief supporting history, or explicitly requested by the user.",
+    "If snippets conflict, prefer the current or latest dated information; if recency cannot be determined, say that the context does not clearly identify the latest role.",
+    "Never answer as a different person named in copied or default instructions.",
+    "Keep answers concise, professional, and natural.",
+    adminInstruction,
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+function contextMetadataLines(ctx) {
+  return [
+    ctx.source ? `Source: ${ctx.source}` : "",
+    ctx.sourceType ? `Source type: ${ctx.sourceType}` : "",
+    ctx.title ? `Title: ${ctx.title}` : "",
+  ].filter(Boolean);
+}
+
+function buildPrompt(question, instruction, contexts, responseLang, profile) {
+  const instructionBlock = buildStandardInstruction(profile, instruction);
+  const contextBlock = contexts
+    .map(
+      (ctx, idx) =>
+        [`[Context ${idx + 1}] ${ctx.text}`, ...contextMetadataLines(ctx)].join(
+          "\n"
+        )
+    )
+    .join("\n\n");
+
+  return [
+    `${instructionBlock}`,
+    "",
+    "Strict rules:",
+    "- Use only the provided context snippets below.",
+    responseLang
+      ? `- Always respond in this language: ${responseLang}.`
+      : "- Respond in the same language as the user question.",
+    "- If a UI language hint conflicts with the user's question language, prioritize the user's question language.",
+    "- If the answer is not in context, answer exactly: \"I don't know based on the provided context.\"",
+    "- Do not invent facts, names, dates, or background details.",
+    "- For professional summaries, prioritize the current/latest context before older career history.",
+    "",
+    "Context snippets:",
+    contextBlock,
+    "",
+    `User question: ${question}`,
+    "Assistant:",
+  ].join("\n");
+}
+
+function normalizeLang(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase().replace("_", "-");
+  if (!normalized) return null;
+  if (/^[a-z]{2}(-[a-z]{2})?$/.test(normalized)) return normalized;
+  return null;
+}
+
+function detectQuestionLanguage(text) {
+  const t = (text || "").toLowerCase();
+  if (!t.trim()) return null;
+  const deHints = [
+    "wie",
+    "heissen",
+    "heißt",
+    "und",
+    "was",
+    "über",
+    "ueber",
+    "beruf",
+    "erfahrung",
+    "dein",
+    "deine",
+    "hast du",
+    "kannst du",
+  ];
+  const itHints = ["ciao", "come", "perche", "perché", "lavoro", "esperienza"];
+  const enHints = ["what", "who", "tell me", "experience", "career", "your"];
+
+  const count = (hints) =>
+    hints.reduce((acc, h) => (t.includes(h) ? acc + 1 : acc), 0);
+
+  const de = count(deHints);
+  const it = count(itHints);
+  const en = count(enHints);
+
+  if (de >= it && de >= en && de > 0) return "de";
+  if (it >= de && it >= en && it > 0) return "it";
+  if (en > 0) return "en";
+  return null;
+}
+
+function fallbackForLang(lang) {
+  const base = normalizeLang(lang)?.slice(0, 2);
+  if (base === "de") return "Ich weiß es auf Basis des bereitgestellten Kontexts nicht.";
+  if (base === "it")
+    return "Non lo so in base al contesto fornito.";
+  return "I don't know based on the provided context.";
+}
+
+function createSseTextResponse(text) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const payload = {
+        choices: [
+          {
+            delta: {content: text},
+          },
+        ],
+      };
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+function getLatestUserQuestion(messages = []) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.role === "user" && typeof m?.content === "string" && m.content.trim()) {
+      return m.content.trim();
+    }
+  }
+  return "";
+}
+
+function isProfessionalBackgroundQuestion(text) {
+  const t = (text || "").toLowerCase();
+  if (!t.trim()) return false;
+
+  return [
+    "background",
+    "career",
+    "experience",
+    "current role",
+    "current position",
+    "latest role",
+    "recent role",
+    "work history",
+    "professional",
+    "cv",
+    "resume",
+    "beruf",
+    "erfahrung",
+    "karriere",
+    "hintergrund",
+    "aktuelle",
+    "derzeit",
+    "lebenslauf",
+    "esperienza",
+    "carriera",
+    "ruolo attuale",
+    "curriculum",
+  ].some((hint) => t.includes(hint));
+}
+
+function recencyScore(text) {
+  const value = String(text || "");
+  const lower = value.toLowerCase();
+  const currentSignal =
+    /\b(present|current|currently|ongoing|latest|recent|now|today)\b/i.test(
+      value
+    ) ||
+    /\b(gegenwart|aktuell|derzeit|heute|laufend|bis heute)\b/i.test(value) ||
+    /\b(presente|attuale|attualmente|oggi|recente)\b/i.test(value);
+  const summarySignal =
+    /\b(profile|summary|about|overview|background|experience|cv|resume)\b/i.test(
+      value
+    ) ||
+    /\b(profil|zusammenfassung|hintergrund|erfahrung|lebenslauf)\b/i.test(
+      value
+    ) ||
+    /\b(profilo|sommario|esperienza|curriculum)\b/i.test(value);
+  const years = [...value.matchAll(/\b(19\d{2}|20\d{2})\b/g)]
+    .map((match) => Number(match[1]))
+    .filter((year) => year >= 1950 && year <= CURRENT_YEAR + 1);
+  const latestYear = years.length ? Math.max(...years) : 0;
+  const oldOnlyPenalty =
+    years.length && latestYear < CURRENT_YEAR - 10 && !currentSignal ? 20 : 0;
+
+  return (
+    (currentSignal ? 10000 : 0) +
+    (summarySignal ? 100 : 0) +
+    latestYear -
+    oldOnlyPenalty +
+    Math.min(lower.length / 1000, 5)
+  );
+}
+
+function rankContexts(question, contexts) {
+  if (!isProfessionalBackgroundQuestion(question)) return contexts;
+
+  return contexts
+    .map((ctx, index) => ({
+      ctx,
+      index,
+      score: recencyScore(`${ctx.title || ""}\n${ctx.source || ""}\n${ctx.text}`),
+    }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ctx}) => ctx);
+}
+
+function cosineSimilarity(a = [], b = []) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return -1;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const va = Number(a[i]);
+    const vb = Number(b[i]);
+    if (!Number.isFinite(va) || !Number.isFinite(vb)) continue;
+    dot += va * vb;
+    normA += va * va;
+    normB += vb * vb;
+  }
+  if (normA === 0 || normB === 0) return -1;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+async function loadRuntimeConfig() {
   let client;
   try {
     const {MONGODB_URI, MONGODB_DB} = process.env;
-    if (!MONGODB_URI || !MONGODB_DB) return null;
+    if (!MONGODB_URI || !MONGODB_DB) return {profile: null, settings: null};
 
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/agents/chat/stream (runtime-config)");
     const db = client.db(MONGODB_DB);
-    const collection = db.collection(SETTINGS_COLLECTION);
-    const doc = await collection.findOne({}, {projection: {_id: 0}});
-    return doc;
+    const [settings, user] = await Promise.all([
+      db
+        .collection(SETTINGS_COLLECTION)
+        .findOne(
+          {},
+          {projection: {_id: 0}, sort: {updatedAt: -1, createdAt: -1}}
+        ),
+      db.collection(USERS_COLLECTION).findOne(
+        {
+          $or: [
+            {isAdmin: true},
+            {role: "admin"},
+            {roles: "admin"},
+          ],
+        },
+        {
+          projection: {
+            _id: 0,
+            email: 1,
+            firstName: 1,
+            lastName: 1,
+            name: 1,
+          },
+          sort: {createdAt: 1, updatedAt: 1},
+        }
+      ),
+    ]);
+
+    return {
+      profile: normalizeOwnerProfile(user),
+      settings,
+    };
   } catch (error) {
-    console.warn("Chat stream: failed to load settings from Mongo", error);
-    return null;
+    console.warn("Chat stream: failed to load runtime config from Mongo", error);
+    return {profile: null, settings: null};
+  } finally {
+    if (client) await client.close();
+  }
+}
+
+async function retrieveContext(question, namespace, retrievalK) {
+  let client;
+  try {
+    const {MONGODB_URI, MONGODB_DB} = process.env;
+    if (!MONGODB_URI || !MONGODB_DB) return [];
+
+    client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    console.log("[mongo] Connected: /api/agents/chat/stream (embeddings)");
+
+    const db = client.db(MONGODB_DB);
+    const collection = db.collection(EMBEDDINGS_COLLECTION);
+    const embeddings = new OllamaEmbeddings({
+      model: "nomic-embed-text",
+      baseUrl: OLLAMA_BASE_URL,
+    });
+    const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
+      collection,
+      indexName: VECTOR_INDEX,
+      textKey: "text",
+      embeddingKey: "embedding",
+    });
+
+    const requestedK =
+      Number.isFinite(retrievalK) && retrievalK > 0
+        ? Math.min(Math.floor(retrievalK), 20)
+        : DEFAULT_RETRIEVAL_K;
+    const safeK = isProfessionalBackgroundQuestion(question)
+      ? Math.min(Math.max(requestedK, 12), 20)
+      : requestedK;
+    // Support both shapes:
+    // 1) documents with top-level `namespace`
+    // 2) documents with nested `metadata.namespace`
+    const filter = namespace
+      ? {
+          $or: [{namespace}, {"metadata.namespace": namespace}],
+        }
+      : undefined;
+    const docs = await vectorStore.similaritySearch(question, safeK, filter);
+    console.log("[rag] retrieval", {
+      namespace: namespace || null,
+      k: safeK,
+      hits: Array.isArray(docs) ? docs.length : 0,
+    });
+
+    return docs
+      .map((doc) => ({
+        text:
+          typeof doc?.pageContent === "string" ? doc.pageContent.trim() : "",
+        source:
+          typeof doc?.metadata?.source === "string"
+            ? doc.metadata.source
+            : null,
+        sourceType:
+          typeof doc?.metadata?.sourceType === "string"
+            ? doc.metadata.sourceType
+            : null,
+        title:
+          typeof doc?.metadata?.title === "string" ? doc.metadata.title : null,
+      }))
+      .filter((d) => d.text);
+  } catch (error) {
+    const isSearchNotEnabled =
+      error?.code === 31082 || error?.codeName === "SearchNotEnabled";
+    if (isSearchNotEnabled) {
+      console.warn(
+        "Chat stream: Atlas vector search unavailable, using local cosine fallback"
+      );
+      try {
+        const {MONGODB_URI, MONGODB_DB} = process.env;
+        if (!MONGODB_URI || !MONGODB_DB) return [];
+        const fallbackClient = new MongoClient(MONGODB_URI);
+        await fallbackClient.connect();
+        console.log("[mongo] Connected: /api/agents/chat/stream (embeddings-fallback)");
+        const db = fallbackClient.db(MONGODB_DB);
+        const collection = db.collection(EMBEDDINGS_COLLECTION);
+
+        const requestedK =
+          Number.isFinite(retrievalK) && retrievalK > 0
+            ? Math.min(Math.floor(retrievalK), 20)
+            : DEFAULT_RETRIEVAL_K;
+        const safeK = isProfessionalBackgroundQuestion(question)
+          ? Math.min(Math.max(requestedK, 12), 20)
+          : requestedK;
+        const query = namespace
+          ? {
+              $or: [{namespace}, {"metadata.namespace": namespace}],
+            }
+          : {};
+
+        const candidates = await collection
+          .find(query, {
+            projection: {
+              text: 1,
+              source: 1,
+              embedding: 1,
+              "metadata.source": 1,
+              "metadata.sourceType": 1,
+              "metadata.title": 1,
+            },
+          })
+          .limit(2000)
+          .toArray();
+
+        const fallbackEmbeddings = new OllamaEmbeddings({
+          model: "nomic-embed-text",
+          baseUrl: OLLAMA_BASE_URL,
+        });
+        const queryEmbedding = await fallbackEmbeddings.embedQuery(question);
+        const boostProfessionalRecency =
+          isProfessionalBackgroundQuestion(question);
+        const ranked = candidates
+          .map((doc) => {
+            const text = typeof doc?.text === "string" ? doc.text.trim() : "";
+            const source =
+              typeof doc?.source === "string"
+                ? doc.source
+                : typeof doc?.metadata?.source === "string"
+                ? doc.metadata.source
+                : null;
+            const sourceType =
+              typeof doc?.metadata?.sourceType === "string"
+                ? doc.metadata.sourceType
+                : null;
+            const title =
+              typeof doc?.metadata?.title === "string"
+                ? doc.metadata.title
+                : null;
+            const semanticScore = cosineSimilarity(
+              queryEmbedding,
+              doc?.embedding
+            );
+            const score =
+              semanticScore +
+              (boostProfessionalRecency
+                ? recencyScore(`${title || ""}\n${source || ""}\n${text}`) /
+                  100000
+                : 0);
+
+            return {
+              score,
+              source,
+              sourceType,
+              text,
+              title,
+            };
+          })
+          .filter((item) => item.text && Number.isFinite(item.score) && item.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, safeK)
+          .map(({text, source, sourceType, title}) => ({
+            text,
+            source,
+            sourceType,
+            title,
+          }));
+
+        console.log("[rag] retrieval-fallback", {
+          namespace: namespace || null,
+          k: safeK,
+          candidates: candidates.length,
+          hits: ranked.length,
+        });
+
+        await fallbackClient.close();
+        return ranked;
+      } catch (fallbackError) {
+        console.warn("Chat stream: retrieval fallback failed", {
+          message: fallbackError?.message || String(fallbackError),
+          namespace: namespace || null,
+        });
+        return [];
+      }
+    }
+    console.warn("Chat stream: retrieval failed", {
+      message: error?.message || String(error),
+      namespace: namespace || null,
+    });
+    return [];
   } finally {
     if (client) await client.close();
   }
@@ -53,14 +543,59 @@ export async function POST(req) {
       );
     }
 
-    const settings = (await loadSettings()) || {};
+    const runtimeConfig = await loadRuntimeConfig();
+    const settings = runtimeConfig.settings || {};
+    const profile = runtimeConfig.profile;
+    const question = getLatestUserQuestion(messages);
+    if (!question) {
+      return NextResponse.json(
+        {error: "Missing user question in messages."},
+        {status: 400}
+      );
+    }
 
     const instruction =
       typeof settings.instruction === "string"
         ? settings.instruction
         : undefined;
+    const namespace =
+      typeof body?.namespace === "string" && body.namespace.trim()
+        ? body.namespace.trim()
+        : typeof settings?.namespace === "string" && settings.namespace.trim()
+        ? settings.namespace.trim()
+        : undefined;
+    const retrievalK =
+      typeof body?.retrieval_k === "number"
+        ? body.retrieval_k
+        : typeof settings?.retrieval_k === "number"
+        ? settings.retrieval_k
+        : DEFAULT_RETRIEVAL_K;
+    const responseLang =
+      detectQuestionLanguage(question) ||
+      normalizeLang(body?.lang) ||
+      normalizeLang(body?.locale) ||
+      normalizeLang(settings?.response_language);
+    console.log("[rag] request", {
+      namespace: namespace || null,
+      retrievalK,
+      responseLang: responseLang || null,
+      questionPreview: question.slice(0, 120),
+    });
 
-    const prompt = buildPrompt(messages, instruction);
+    const contexts = rankContexts(
+      question,
+      await retrieveContext(question, namespace, retrievalK)
+    );
+    if (!contexts.length) {
+      return createSseTextResponse(fallbackForLang(responseLang));
+    }
+    const prompt = buildPrompt(
+      question,
+      instruction,
+      contexts,
+      responseLang,
+      profile
+    );
 
     const modelName =
       settings.model || process.env.OLLAMA_MODEL || DEFAULT_MODEL;

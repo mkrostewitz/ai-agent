@@ -1,6 +1,9 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const FALLBACK_LOCALE = process.env.I18N_FALLBACK_LOCALE || "en";
 
 export async function GET(req) {
@@ -25,6 +28,7 @@ export async function GET(req) {
 
     client = new MongoClient(MONGODB_URI);
     await client.connect();
+    console.log("[mongo] Connected: /api/default-questions");
 
     const db = client.db(MONGODB_DB);
     const collection = db.collection(MONGODB_DEFAULT_QUESTIONS_COLLECTION);
