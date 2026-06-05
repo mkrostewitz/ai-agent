@@ -1,5 +1,12 @@
-import ChatStream from "./chat/page";
+import LoginForm from "./admin/login/LoginForm";
+import styles from "./admin/admin.module.css";
+
+export const dynamic = "force-dynamic";
 
 export default function Home() {
-  return <ChatStream />;
+  return (
+    <main className={styles.loginShell}>
+      <LoginForm />
+    </main>
+  );
 }
