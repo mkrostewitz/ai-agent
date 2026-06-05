@@ -1,18 +1,25 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 import {getRequestTracking} from "@/app/lib/requestGeo";
+import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
+
+export function OPTIONS() {
+  return widgetOptionsResponse();
+}
 
 export async function PUT(req) {
   let client;
   try {
     const {MONGODB_URI, MONGODB_DB} = process.env;
     if (!MONGODB_URI || !MONGODB_DB) {
-      return NextResponse.json(
-        {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
-        {status: 500}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
+          {status: 500}
+        )
       );
     }
 
@@ -27,9 +34,11 @@ export async function PUT(req) {
     const tracking = await getRequestTracking(req);
 
     if (!conversationId) {
-      return NextResponse.json(
-        {error: "Missing conversation_id in body."},
-        {status: 400}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Missing conversation_id in body."},
+          {status: 400}
+        )
       );
     }
 
@@ -80,18 +89,22 @@ export async function PUT(req) {
     );
 
     if (result.matchedCount === 0) {
-      return NextResponse.json(
-        {error: "Conversation not found."},
-        {status: 404}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Conversation not found."},
+          {status: 404}
+        )
       );
     }
 
-    return NextResponse.json({ok: true});
+    return withWidgetCors(NextResponse.json({ok: true}));
   } catch (error) {
     console.error("Conversation update error:", error);
-    return NextResponse.json(
-      {error: "Failed to update conversation"},
-      {status: 500}
+    return withWidgetCors(
+      NextResponse.json(
+        {error: "Failed to update conversation"},
+        {status: 500}
+      )
     );
   } finally {
     if (client) {

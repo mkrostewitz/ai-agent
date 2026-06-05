@@ -1,10 +1,15 @@
 import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
+import {widgetOptionsResponse, withWidgetCors} from "../agents/cors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const FALLBACK_LOCALE = process.env.I18N_FALLBACK_LOCALE || "en";
+
+export function OPTIONS() {
+  return widgetOptionsResponse();
+}
 
 export async function GET(req) {
   let client;
@@ -20,9 +25,11 @@ export async function GET(req) {
     } = process.env;
 
     if (!MONGODB_URI || !MONGODB_DB) {
-      return NextResponse.json(
-        {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
-        {status: 500}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
+          {status: 500}
+        )
       );
     }
 
@@ -60,12 +67,16 @@ export async function GET(req) {
       .map((q) => (typeof q === "string" ? q.trim() : ""))
       .filter(Boolean);
 
-    return NextResponse.json({questions, locale: requestedLocale});
+    return withWidgetCors(
+      NextResponse.json({questions, locale: requestedLocale})
+    );
   } catch (error) {
     console.error("Failed to load default questions:", error);
-    return NextResponse.json(
-      {error: "Failed to load default questions"},
-      {status: 500}
+    return withWidgetCors(
+      NextResponse.json(
+        {error: "Failed to load default questions"},
+        {status: 500}
+      )
     );
   } finally {
     if (client) {

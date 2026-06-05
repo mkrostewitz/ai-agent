@@ -4,6 +4,7 @@ import {Ollama} from "@langchain/ollama";
 import {OllamaEmbeddings} from "@langchain/ollama";
 import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
 import {getOllamaRequestOptions} from "@/app/lib/ollamaRuntime";
+import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "phi3:mini";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
@@ -17,6 +18,10 @@ const EMBEDDINGS_COLLECTION =
 const VECTOR_INDEX = process.env.MONGODB_INDEX || "vector_index";
 const DEFAULT_RETRIEVAL_K = Number(process.env.RAG_TOP_K || 6);
 const CURRENT_YEAR = new Date().getFullYear();
+
+export function OPTIONS() {
+  return widgetOptionsResponse();
+}
 
 function cleanString(value) {
   return String(value || "").trim();
@@ -69,8 +74,11 @@ function buildStandardInstruction(profile, instruction) {
     lastNameLine,
     "",
     "Use uploaded CVs, resumes, and indexed website data as the source of truth for the person's professional background.",
-    "For background, career, current-role, and experience questions, lead with the most recent or current positions, especially date ranges marked Present/current/latest or the newest years in the context.",
-    "Mention older positions only when they are directly relevant, useful as brief supporting history, or explicitly requested by the user.",
+    "For background, career, current-role, and experience questions, answer in reverse chronological order: current/latest positions first, then the next most recent roles.",
+    "For broad background questions, include the current/latest organization(s) plus the next three distinct prior organizations when they are present in the CV context.",
+    "Do not skip from a current role to much older roles when newer intermediate roles are present in the context.",
+    "When an older snippet groups several roles, cite only the newest role from that group in concise summaries; name older employers from that group only when explicitly requested.",
+    "Do not infer subsidiary, acquisition, ownership, or transformation relationships between companies unless the context explicitly says so.",
     "If snippets conflict, prefer the current or latest dated information; if recency cannot be determined, say that the context does not clearly identify the latest role.",
     "Never answer as a different person named in copied or default instructions.",
     "Keep answers concise, professional, and natural.",
@@ -111,6 +119,7 @@ function buildPrompt(question, instruction, contexts, responseLang, profile) {
     "- If the answer is not in context, answer exactly: \"I don't know based on the provided context.\"",
     "- Do not invent facts, names, dates, or background details.",
     "- For professional summaries, prioritize the current/latest context before older career history.",
+    "- For broad background answers, name the current/latest organization(s), then the next three distinct prior organizations from the CV context if available.",
     "",
     "Context snippets:",
     contextBlock,
@@ -186,13 +195,15 @@ function createSseTextResponse(text) {
       controller.close();
     },
   });
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+  return withWidgetCors(
+    new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    })
+  );
 }
 
 function getLatestUserQuestion(messages = []) {
@@ -540,9 +551,11 @@ export async function POST(req) {
     const messages = Array.isArray(body?.messages) ? body.messages : [];
 
     if (!messages.length) {
-      return NextResponse.json(
-        {error: "Missing `messages` array in request body."},
-        {status: 400}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Missing `messages` array in request body."},
+          {status: 400}
+        )
       );
     }
 
@@ -551,9 +564,11 @@ export async function POST(req) {
     const profile = runtimeConfig.profile;
     const question = getLatestUserQuestion(messages);
     if (!question) {
-      return NextResponse.json(
-        {error: "Missing user question in messages."},
-        {status: 400}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Missing user question in messages."},
+          {status: 400}
+        )
       );
     }
 
@@ -654,18 +669,22 @@ export async function POST(req) {
       },
     });
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-      },
-    });
+    return withWidgetCors(
+      new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      })
+    );
   } catch (error) {
     console.error("Chat stream error:", error);
-    return NextResponse.json(
-      {error: "Failed to start chat stream"},
-      {status: 500}
+    return withWidgetCors(
+      NextResponse.json(
+        {error: "Failed to start chat stream"},
+        {status: 500}
+      )
     );
   }
 }

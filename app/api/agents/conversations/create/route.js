@@ -2,18 +2,25 @@ import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 import {randomUUID} from "crypto";
 import {getRequestTracking} from "@/app/lib/requestGeo";
+import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
+
+export function OPTIONS() {
+  return widgetOptionsResponse();
+}
 
 export async function POST(req) {
   let client;
   try {
     const {MONGODB_URI, MONGODB_DB} = process.env;
     if (!MONGODB_URI || !MONGODB_DB) {
-      return NextResponse.json(
-        {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
-        {status: 500}
+      return withWidgetCors(
+        NextResponse.json(
+          {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
+          {status: 500}
+        )
       );
     }
 
@@ -53,14 +60,18 @@ export async function POST(req) {
       updated_at: now,
     });
 
-    return NextResponse.json({
-      data: {conversation_id: conversationId},
-    });
+    return withWidgetCors(
+      NextResponse.json({
+        data: {conversation_id: conversationId},
+      })
+    );
   } catch (error) {
     console.error("Conversation create error:", error);
-    return NextResponse.json(
-      {error: "Failed to create conversation"},
-      {status: 500}
+    return withWidgetCors(
+      NextResponse.json(
+        {error: "Failed to create conversation"},
+        {status: 500}
+      )
     );
   } finally {
     if (client) {

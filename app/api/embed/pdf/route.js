@@ -9,6 +9,8 @@ import {embedRequestSchema} from "../validation";
 import normalizeText from "@/app/helpers/normalizeText";
 import buildIds from "@/app/helpers/buildIds";
 import {requireAdminApi} from "@/app/lib/adminAuth";
+import {storeBuffer} from "@/app/lib/fileStorage";
+import {getOllamaRequestOptions} from "@/app/lib/ollamaRuntime";
 
 const DEFAULT_CHUNK_SIZE = 500;
 const DEFAULT_CHUNK_OVERLAP = 80;
@@ -36,6 +38,7 @@ export async function POST(req) {
         uploads.push({
           type: "buffer",
           buffer,
+          contentType: file.type || "application/pdf",
           name: file.name || "upload.pdf",
           namespace: body.namespace,
         });
@@ -51,6 +54,7 @@ export async function POST(req) {
         uploads.push({
           type: "buffer",
           buffer,
+          contentType: "application/pdf",
           name: body.fileName || "upload.pdf",
           namespace: body.namespace,
         });
@@ -111,6 +115,7 @@ export async function POST(req) {
     const embeddings = new OllamaEmbeddings({
       model: "nomic-embed-text",
       baseUrl: OLLAMA_BASE_URL || "http://localhost:11434",
+      requestOptions: getOllamaRequestOptions(),
     });
 
     const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
@@ -126,6 +131,7 @@ export async function POST(req) {
     const sourceEntries = uploads.map((u) => ({
       kind: "buffer",
       buffer: u.buffer,
+      contentType: u.contentType || "application/pdf",
       name: u.name,
       namespace: u.namespace || namespace,
     }));
@@ -153,6 +159,21 @@ export async function POST(req) {
           chunkOverlap,
         });
         const splits = await splitter.splitDocuments(docs);
+        const storedFile = await storeBuffer({
+          buffer: entry.buffer,
+          contentType: entry.contentType,
+          directory: "documents",
+          extension: "pdf",
+          originalName: entry.name,
+          visibility: "private",
+        });
+        const storageMetadata = {
+          storageBucket: storedFile.bucket || "",
+          storageDriver: storedFile.driver,
+          storageKey: storedFile.key,
+          storageUrl: storedFile.url || "",
+          storageVisibility: storedFile.visibility,
+        };
 
         const ids = buildIds(splits.length, ns);
         const docsWithSource = splits.map(
@@ -164,6 +185,7 @@ export async function POST(req) {
                 source: entry.name,
                 namespace: ns,
                 id: ids[idx],
+                ...storageMetadata,
               },
             })
         );
@@ -176,6 +198,11 @@ export async function POST(req) {
           namespace: ns,
           added: splits.length,
           pages: docs.length,
+          storage: {
+            bucket: storedFile.bucket || "",
+            driver: storedFile.driver,
+            key: storedFile.key,
+          },
           uploaded: true,
         });
       } catch (err) {
