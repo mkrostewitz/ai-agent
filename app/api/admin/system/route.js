@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 
 import {getIntegrationsConfig, updateIntegrationsConfig} from "@/app/lib/appConfig";
 import {requireAdminApi} from "@/app/lib/adminAuth";
+import {getMailDeliveryStatus} from "@/app/lib/mail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,6 +13,16 @@ function tokenPreview(token) {
   return text.length <= 4 ? "set" : `...${text.slice(-4)}`;
 }
 
+async function integrationsResponse(token) {
+  return {
+    integrations: {
+      ipInfoConfigured: Boolean(token),
+      ipInfoTokenPreview: tokenPreview(token),
+      mail: await getMailDeliveryStatus(),
+    },
+  };
+}
+
 export async function GET(request) {
   const auth = await requireAdminApi(request);
   if (auth.error) return auth.error;
@@ -20,12 +31,7 @@ export async function GET(request) {
     const config = await getIntegrationsConfig();
     const token = config?.ipInfoToken || "";
 
-    return NextResponse.json({
-      integrations: {
-        ipInfoConfigured: Boolean(token),
-        ipInfoTokenPreview: tokenPreview(token),
-      },
-    });
+    return NextResponse.json(await integrationsResponse(token));
   } catch (error) {
     console.error("Admin system GET error:", error);
     return NextResponse.json(
@@ -47,27 +53,22 @@ export async function PUT(request) {
       ? body.ipInfoToken
       : undefined;
 
-    if (typeof nextToken !== "string") {
-      const config = await getIntegrationsConfig();
-      const token = config?.ipInfoToken || "";
+    const updatePayload = {};
 
-      return NextResponse.json({
-        integrations: {
-          ipInfoConfigured: Boolean(token),
-          ipInfoTokenPreview: tokenPreview(token),
-        },
-      });
+    if (typeof nextToken === "string") {
+      updatePayload.ipInfoToken = nextToken;
     }
 
-    const config = await updateIntegrationsConfig({ipInfoToken: nextToken});
+    if (body.mail && typeof body.mail === "object" && !Array.isArray(body.mail)) {
+      updatePayload.mail = body.mail;
+    }
+
+    const config = Object.keys(updatePayload).length
+      ? await updateIntegrationsConfig(updatePayload)
+      : await getIntegrationsConfig();
     const token = config?.ipInfoToken || "";
 
-    return NextResponse.json({
-      integrations: {
-        ipInfoConfigured: Boolean(token),
-        ipInfoTokenPreview: tokenPreview(token),
-      },
-    });
+    return NextResponse.json(await integrationsResponse(token));
   } catch (error) {
     console.error("Admin system PUT error:", error);
     return NextResponse.json(

@@ -2,10 +2,13 @@ import {NextResponse} from "next/server";
 import {MongoClient} from "mongodb";
 import {randomUUID} from "crypto";
 import {getRequestTracking} from "@/app/lib/requestGeo";
+import {sendNewConversationNotification} from "@/app/lib/conversationNotifications";
 import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
+
+export const runtime = "nodejs";
 
 export function OPTIONS() {
   return widgetOptionsResponse();
@@ -41,8 +44,7 @@ export async function POST(req) {
     console.log("[mongo] Connected: /api/agents/conversations/create");
     const db = client.db(MONGODB_DB);
     const collection = db.collection(CONVERSATIONS_COLLECTION);
-
-    await collection.insertOne({
+    const storedConversation = {
       conversation_id: conversationId,
       messages: conversation.map((m) => ({
         role: m?.role === "assistant" ? "assistant" : "user",
@@ -58,7 +60,15 @@ export async function POST(req) {
       status: "open",
       created_at: now,
       updated_at: now,
-    });
+    };
+
+    await collection.insertOne(storedConversation);
+
+    try {
+      await sendNewConversationNotification(storedConversation);
+    } catch (error) {
+      console.error("Conversation notification email error:", error);
+    }
 
     return withWidgetCors(
       NextResponse.json({

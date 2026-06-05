@@ -14,6 +14,7 @@ import {
   FiPlus,
   FiRefreshCw,
   FiSave,
+  FiSend,
   FiSettings,
   FiTrash2,
   FiUpload,
@@ -79,6 +80,69 @@ const DEFAULT_SYSTEM = {
   ipInfoTokenPreview: "",
   ipInfoToken: "",
   clearIpInfoToken: false,
+  mail: {
+    provider: "apple",
+    providerLabel: "Apple iCloud Mail",
+    configured: false,
+    enabled: true,
+    active: false,
+    host: "smtp.mail.me.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    timeoutMs: 10000,
+    from: "",
+    fromName: "Krostewitz AI Agent",
+    recipients: [],
+    replyTo: "",
+    username: "",
+    passwordConfigured: false,
+    smtpPassword: "",
+    clearSmtpPassword: false,
+    source: "database",
+    missing: [],
+  },
+};
+
+const MAIL_PROVIDER_OPTIONS = [
+  {value: "apple", label: "Apple iCloud Mail"},
+  {value: "gmail", label: "Gmail"},
+  {value: "microsoft", label: "Microsoft 365 / Outlook"},
+  {value: "custom", label: "Custom SMTP"},
+  {value: "disabled", label: "Disabled"},
+];
+
+const MAIL_PROVIDER_PRESETS = {
+  apple: {
+    host: "smtp.mail.me.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+  },
+  gmail: {
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+  },
+  microsoft: {
+    host: "smtp.office365.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+  },
+  custom: {
+    host: "",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+  },
+  disabled: {
+    host: "",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+  },
 };
 
 const DEFAULT_AGENT = {
@@ -218,6 +282,41 @@ async function fetchJson(url, options = {}) {
   return data;
 }
 
+function normalizeMailDraft(mail = {}) {
+  return {
+    ...DEFAULT_SYSTEM.mail,
+    ...(mail || {}),
+    recipients: Array.isArray(mail?.recipients) ? mail.recipients : [],
+    smtpPassword: String(mail?.smtpPassword || ""),
+    clearSmtpPassword: Boolean(mail?.clearSmtpPassword),
+  };
+}
+
+function recipientsToText(recipients) {
+  return Array.isArray(recipients) ? recipients.join(", ") : "";
+}
+
+function textToRecipients(value) {
+  return String(value || "")
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildSystemPayload(system = {}) {
+  const payload = {};
+
+  if (system.ipInfoToken?.trim()) {
+    payload.ipInfoToken = system.ipInfoToken;
+  } else if (system.clearIpInfoToken) {
+    payload.clearIpInfoToken = true;
+  }
+
+  payload.mail = normalizeMailDraft(system.mail);
+
+  return payload;
+}
+
 function normalizeLocation(tracking = {}) {
   return (
     tracking.address ||
@@ -248,13 +347,17 @@ function mapUrl(tracking = {}) {
 
 function Toast({toast, onClose}) {
   if (!toast) return null;
+  const toneClassName =
+    toast.type === "error"
+      ? styles.toastError
+      : toast.type === "warning"
+      ? styles.toastWarning
+      : styles.toastSuccess;
 
   return (
     <button
       type="button"
-      className={`${styles.toast} ${
-        toast.type === "error" ? styles.toastError : styles.toastSuccess
-      }`}
+      className={`${styles.toast} ${toneClassName}`}
       onClick={onClose}
     >
       {toast.message}
@@ -864,6 +967,7 @@ function SettingsSection({
   system,
   setSystem,
   onSave,
+  onSendTestEmail,
   saving,
 }) {
   const isIpInfoConnected =
@@ -872,6 +976,18 @@ function SettingsSection({
     !system.ipInfoConfigured ||
     Boolean(system.clearIpInfoToken) ||
     Boolean(system.ipInfoToken?.trim());
+  const mail = normalizeMailDraft(system.mail);
+  const mailRecipients = Array.isArray(mail.recipients) ? mail.recipients : [];
+  const mailMissing = Array.isArray(mail.missing) ? mail.missing : [];
+  const mailStatus = mail.active
+    ? "Ready"
+    : mail.enabled === false
+    ? "Disabled"
+    : "Needs config";
+  const mailStatusClass = mail.active
+    ? styles.connectionChipConnected
+    : styles.connectionChipDisconnected;
+  const mailEditable = mail.provider !== "disabled";
   const selectedNamespace = String(settings.namespace || "").trim();
   const namespaceSelectOptions = selectedNamespace
     ? [
@@ -886,6 +1002,57 @@ function SettingsSection({
       label: namespace,
     })),
   ];
+
+  function setMailField(field, value) {
+    setSystem((current) => ({
+      ...current,
+      mail: {
+        ...normalizeMailDraft(current.mail),
+        [field]: value,
+      },
+    }));
+  }
+
+  function selectMailProvider(provider) {
+    const preset = MAIL_PROVIDER_PRESETS[provider] || MAIL_PROVIDER_PRESETS.custom;
+
+    setSystem((current) => {
+      const currentMail = normalizeMailDraft(current.mail);
+      return {
+        ...current,
+        mail: {
+          ...currentMail,
+          provider,
+          enabled: provider === "disabled" ? false : currentMail.enabled !== false,
+          host: preset.host,
+          port: preset.port,
+          secure: preset.secure,
+          requireTLS: preset.requireTLS,
+        },
+      };
+    });
+  }
+
+  function clearMailSettings() {
+    setSystem((current) => ({
+      ...current,
+      mail: {
+        ...DEFAULT_SYSTEM.mail,
+        provider: "disabled",
+        providerLabel: "Disabled",
+        enabled: false,
+        active: false,
+        configured: false,
+        host: "",
+        fromName: "",
+        smtpPassword: "",
+        clearSmtpPassword: true,
+        passwordConfigured: false,
+        source: "database",
+        missing: [],
+      },
+    }));
+  }
 
   return (
     <section className={styles.panel}>
@@ -1056,6 +1223,200 @@ function SettingsSection({
             </button>
           )}
         </div>
+      </div>
+
+      <div className={styles.integrationPanel}>
+        <div className={styles.integrationHeader}>
+          <div className={styles.titleBlock}>
+            <h2>Email delivery</h2>
+          </div>
+          <div className={`${styles.sectionActions} ${styles.mailHeaderActions}`}>
+            <span className={`${styles.connectionChip} ${mailStatusClass}`}>
+              {mailStatus}
+            </span>
+            <button
+              type="button"
+              className={styles.ghostButton}
+              onClick={onSendTestEmail}
+              disabled={saving}
+            >
+              <FiSend aria-hidden="true" />
+              Send test
+            </button>
+            <button
+              type="button"
+              className={`${styles.primaryButton} ${styles.mailSaveButton}`}
+              onClick={onSave}
+              disabled={saving}
+            >
+              <FiSave aria-hidden="true" />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.mailToggleRow}>
+          <label className={styles.checkboxField}>
+            <input
+              type="checkbox"
+              checked={mail.enabled !== false && mail.provider !== "disabled"}
+              disabled={mail.provider === "disabled"}
+              onChange={(event) => setMailField("enabled", event.target.checked)}
+            />
+            New conversation notification emails
+          </label>
+        </div>
+
+        <div className={styles.mailFormStack}>
+          <div className={styles.mailAccountGrid}>
+            <SelectField
+              label="Provider"
+              options={MAIL_PROVIDER_OPTIONS}
+              value={mail.provider || "apple"}
+              onChange={selectMailProvider}
+            />
+            <label className={styles.field}>
+              From name
+              <input
+                value={mail.fromName || ""}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("fromName", event.target.value)}
+                placeholder="Krostewitz AI Agent"
+              />
+            </label>
+            <label className={styles.field}>
+              From email
+              <input
+                type="email"
+                value={mail.from || ""}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("from", event.target.value)}
+                placeholder="mathias@krostewitz.com"
+              />
+            </label>
+            <label className={styles.field}>
+              Reply-to
+              <input
+                type="email"
+                value={mail.replyTo || ""}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("replyTo", event.target.value)}
+                placeholder="Optional"
+              />
+            </label>
+          </div>
+
+          <label className={`${styles.field} ${styles.mailRecipientsField}`}>
+            Notification recipients
+            <textarea
+              rows="2"
+              value={recipientsToText(mailRecipients)}
+              disabled={!mailEditable}
+              onChange={(event) =>
+                setMailField("recipients", textToRecipients(event.target.value))
+              }
+              placeholder="mathias@krostewitz.com"
+            />
+          </label>
+
+          <div className={styles.mailServerGrid}>
+            <label className={styles.field}>
+              SMTP host
+              <input
+                value={mail.host || ""}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("host", event.target.value)}
+                placeholder="smtp.mail.me.com"
+              />
+            </label>
+            <label className={styles.field}>
+              Port
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                value={mail.port || 587}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("port", Number(event.target.value))}
+              />
+            </label>
+            <label className={styles.field}>
+              SMTP username
+              <input
+                value={mail.username || ""}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("username", event.target.value)}
+                placeholder="mathias@krostewitz.com"
+                autoComplete="username"
+              />
+            </label>
+            <label className={styles.field}>
+              SMTP password
+              <input
+                type="password"
+                value={mail.smtpPassword || ""}
+                disabled={!mailEditable}
+                onChange={(event) =>
+                  setSystem((current) => ({
+                    ...current,
+                    mail: {
+                      ...normalizeMailDraft(current.mail),
+                      smtpPassword: event.target.value,
+                      clearSmtpPassword: false,
+                    },
+                  }))
+                }
+                placeholder={
+                  mail.passwordConfigured && !mail.clearSmtpPassword
+                    ? "Enter new password"
+                    : "App-specific password"
+                }
+                autoComplete="new-password"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className={styles.mailFooterRow}>
+          <div className={styles.mailSecurityOptions}>
+            <label className={styles.checkboxField}>
+              <input
+                type="checkbox"
+                checked={Boolean(mail.requireTLS)}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("requireTLS", event.target.checked)}
+              />
+              Require STARTTLS
+            </label>
+            <label className={styles.checkboxField}>
+              <input
+                type="checkbox"
+                checked={Boolean(mail.secure)}
+                disabled={!mailEditable}
+                onChange={(event) => setMailField("secure", event.target.checked)}
+              />
+              Use direct TLS
+            </label>
+          </div>
+          <div className={styles.mailPasswordActions}>
+            <button
+              type="button"
+              className={styles.dangerButton}
+              disabled={saving}
+              onClick={clearMailSettings}
+            >
+              <FiTrash2 aria-hidden="true" />
+              Clear settings
+            </button>
+          </div>
+        </div>
+
+        {mail.enabled !== false && !mail.active && mailMissing.length ? (
+          <div className={styles.mailMissingKeys}>
+            <span>Missing settings</span>
+            <strong>{mailMissing.join(", ")}</strong>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1574,20 +1935,10 @@ export default function AdminDashboard({user}) {
         method: "PUT",
         body: JSON.stringify({...settings, response_language: ""}),
       });
-      const systemPayload = {};
-
-      if (system.ipInfoToken?.trim()) {
-        systemPayload.ipInfoToken = system.ipInfoToken;
-      } else if (system.clearIpInfoToken) {
-        systemPayload.clearIpInfoToken = true;
-      }
-
-      const systemData = Object.keys(systemPayload).length
-        ? await fetchJson("/api/admin/system", {
-            method: "PUT",
-            body: JSON.stringify(systemPayload),
-          })
-        : {integrations: system};
+      const systemData = await fetchJson("/api/admin/system", {
+        method: "PUT",
+        body: JSON.stringify(buildSystemPayload(system)),
+      });
 
       setSettings({
         ...DEFAULT_SETTINGS,
@@ -1596,6 +1947,24 @@ export default function AdminDashboard({user}) {
       });
       setSystem({...DEFAULT_SYSTEM, ...(systemData.integrations || {})});
     }, "Settings saved.");
+  }
+
+  async function sendTestEmail() {
+    await runTask(async () => {
+      const systemData = await fetchJson("/api/admin/system", {
+        method: "PUT",
+        body: JSON.stringify(buildSystemPayload(system)),
+      });
+      setSystem({...DEFAULT_SYSTEM, ...(systemData.integrations || {})});
+
+      const result = await fetchJson("/api/admin/system/test-email", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      const accepted = Array.isArray(result.accepted) ? result.accepted.length : 0;
+
+      return accepted;
+    }, "Test email sent.");
   }
 
   async function uploadPdf({file, namespace}) {
@@ -1724,6 +2093,7 @@ export default function AdminDashboard({user}) {
             system={system}
             setSystem={setSystem}
             onSave={saveSettings}
+            onSendTestEmail={sendTestEmail}
             saving={busy}
           />
         ) : null}
