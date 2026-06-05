@@ -252,7 +252,7 @@ function normalizeIpGeolocationGeo(ipGeo = {}) {
   };
 }
 
-async function fetchIpGeolocationGeo(ip, apiKey) {
+export async function fetchIpGeolocationGeo(ip, apiKey) {
   const resolvedApiKey = apiKey || (await getIpGeolocationApiKey());
   if (!ip || !resolvedApiKey) return null;
 

@@ -10,7 +10,6 @@ import {
   FiDatabase,
   FiExternalLink,
   FiHelpCircle,
-  FiMapPin,
   FiMessageSquare,
   FiPlus,
   FiRefreshCw,
@@ -164,6 +163,29 @@ const CONVERSATION_STATUSES = [
   {value: "closed", label: "Closed"},
   {value: "spam", label: "Spam"},
 ];
+
+const CONVERSATION_ACTION_TYPES = [
+  {value: "follow_up", label: "Follow-up"},
+  {value: "call", label: "Call"},
+  {value: "email", label: "Email"},
+  {value: "meeting", label: "Meeting"},
+  {value: "qualification", label: "Qualification"},
+  {value: "note", label: "Note"},
+];
+
+const CONVERSATION_STATUS_LABELS = Object.fromEntries(
+  CONVERSATION_STATUSES.filter((status) => status.value).map((status) => [
+    status.value,
+    status.label,
+  ])
+);
+
+const CONVERSATION_ACTION_TYPE_LABELS = Object.fromEntries(
+  CONVERSATION_ACTION_TYPES.map((type) => [type.value, type.label])
+);
+
+const MAP_TILE_INDICES = [0, 1, 2, 3];
+const MAP_TILE_ZOOM = 2;
 
 function formatDateTime(value) {
   if (!value) return "Not available";
@@ -360,30 +382,134 @@ function getCoordinatePair(tracking = {}) {
   return {latitude, longitude};
 }
 
-function pointBbox({latitude, longitude}) {
-  const delta = 0.35;
-  return [
-    longitude - delta,
-    latitude - delta,
-    longitude + delta,
-    latitude + delta,
-  ];
+function projectMapPoint({latitude, longitude}) {
+  const constrainedLatitude = Math.max(Math.min(latitude, 85.05112878), -85.05112878);
+  const latitudeRadians = (constrainedLatitude * Math.PI) / 180;
+  const x = ((longitude + 180) / 360) * 100;
+  const y =
+    (0.5 -
+      Math.log((1 + Math.sin(latitudeRadians)) / (1 - Math.sin(latitudeRadians))) /
+        (4 * Math.PI)) *
+    100;
+
+  return {
+    left: `${Math.max(0, Math.min(100, x))}%`,
+    top: `${Math.max(0, Math.min(100, y))}%`,
+  };
 }
 
-function formatCoordinate(value) {
-  return Number(value.toFixed(6)).toString();
+function conversationTitle(conversation = {}) {
+  return (
+    conversation.user?.name ||
+    conversation.user?.email ||
+    conversation.conversation_id ||
+    "Conversation"
+  );
 }
 
-function mapUrl(tracking = {}) {
-  const coordinates = getCoordinatePair(tracking);
-  if (!coordinates) return "";
+function conversationSourceLabel(conversation = {}) {
+  const source = String(conversation.source || "widget").trim();
+  if (source === "widget") return "Website chat";
+  return source
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
-  const bbox = pointBbox(coordinates).map(formatCoordinate).join(",");
-  const marker = [coordinates.latitude, coordinates.longitude]
-    .map(formatCoordinate)
-    .join(",");
+function conversationContactLine(conversation = {}) {
+  const email = conversation.user?.email || "No email";
+  const phone = conversation.user?.phone || "No phone";
+  return `${email} - ${phone}`;
+}
 
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`;
+function conversationActions(conversation = {}) {
+  return Array.isArray(conversation.actions) ? conversation.actions : [];
+}
+
+function actionTextPreview(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "No actions";
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+}
+
+function conversationActionsPreview(conversation) {
+  const latestAction = conversationActions(conversation)[0];
+  return latestAction ? actionTextPreview(latestAction.text) : "No actions";
+}
+
+function conversationActionTypeLabel(value) {
+  return CONVERSATION_ACTION_TYPE_LABELS[value] || "Action";
+}
+
+function conversationActionsCountLabel(conversation) {
+  const count = conversationActions(conversation).length;
+  return `${count} action${count === 1 ? "" : "s"}`;
+}
+
+function conversationMessageCountLabel(conversation = {}) {
+  const count = Number(conversation.messageCount || conversation.messages?.length || 0);
+  return `${count} message${count === 1 ? "" : "s"}`;
+}
+
+function ConversationMap({activeConversationId, conversations, onSelectConversation}) {
+  const mappedConversations = useMemo(
+    () =>
+      conversations
+        .map((conversation) => ({
+          conversation,
+          coordinates: getCoordinatePair(conversation.tracking || {}),
+        }))
+        .filter((item) => item.coordinates),
+    [conversations]
+  );
+
+  if (mappedConversations.length === 0) {
+    return (
+      <div className={styles.conversationMapPlaceholder}>
+        No location coordinates are available for the current conversations.
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.conversationMap} aria-label="Conversation locations">
+      <div className={styles.conversationMapTiles} aria-hidden="true">
+        {MAP_TILE_INDICES.map((y) =>
+          MAP_TILE_INDICES.map((x) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${x}-${y}`}
+              alt=""
+              src={`https://tile.openstreetmap.org/${MAP_TILE_ZOOM}/${x}/${y}.png`}
+              referrerPolicy="no-referrer"
+            />
+          ))
+        )}
+      </div>
+
+      {mappedConversations.map(({conversation, coordinates}) => (
+        <button
+          key={conversation.id}
+          type="button"
+          className={`${styles.conversationMapMarker} ${
+            activeConversationId === conversation.id
+              ? styles.conversationMapMarkerActive
+              : ""
+          }`}
+          style={projectMapPoint(coordinates)}
+          aria-label={`Open ${conversationTitle(conversation)}`}
+          title={conversationTitle(conversation)}
+          onClick={() => onSelectConversation(conversation.id)}
+        />
+      ))}
+
+      <div className={styles.conversationMapMeta}>
+        <strong>{mappedConversations.length}</strong>
+        <span>
+          mapped location{mappedConversations.length === 1 ? "" : "s"}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function Toast({toast, onClose}) {
@@ -403,15 +529,6 @@ function Toast({toast, onClose}) {
     >
       {toast.message}
     </button>
-  );
-}
-
-function Stat({label, value}) {
-  return (
-    <div className={styles.stat}>
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
   );
 }
 
@@ -1750,6 +1867,7 @@ function ConversationsSection({
   counts,
   filter,
   setFilter,
+  onGeolocate,
   onRefresh,
   onSave,
   onDelete,
@@ -1758,7 +1876,10 @@ function ConversationsSection({
   const [activeId, setActiveId] = useState("");
   const [statusDraft, setStatusDraft] = useState("open");
   const [notesDraft, setNotesDraft] = useState("");
+  const [actionTypeDraft, setActionTypeDraft] = useState("follow_up");
   const [actionDraft, setActionDraft] = useState("");
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isGeolocating, setIsGeolocating] = useState(false);
   const activeConversation = useMemo(
     () =>
       conversations.find((conversation) => conversation.id === activeId) ||
@@ -1766,24 +1887,90 @@ function ConversationsSection({
       null,
     [activeId, conversations]
   );
-  const activeMapUrl = mapUrl(activeConversation?.tracking || {});
+  const activeActions = conversationActions(activeConversation || {});
+  const activeMessages = Array.isArray(activeConversation?.messages)
+    ? activeConversation.messages
+    : [];
+  const hasDetailChanges = Boolean(
+    activeConversation &&
+      (statusDraft !== (activeConversation.status || "open") ||
+        notesDraft !== (activeConversation.notes || ""))
+  );
+  const hasActionDraft = Boolean(actionDraft.trim());
 
   useEffect(() => {
     if (!activeConversation) return;
     setActiveId(activeConversation.id);
     setStatusDraft(activeConversation.status || "open");
     setNotesDraft(activeConversation.notes || "");
+    setActionTypeDraft("follow_up");
     setActionDraft("");
   }, [activeConversation]);
 
-  async function saveActive() {
+  useEffect(() => {
+    if (isDetailsOpen && !activeConversation) {
+      setIsDetailsOpen(false);
+    }
+  }, [activeConversation, isDetailsOpen]);
+
+  useEffect(() => {
+    if (!isDetailsOpen) return undefined;
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") {
+        setIsDetailsOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isDetailsOpen]);
+
+  async function saveLeadDetails() {
     if (!activeConversation) return;
     await onSave(activeConversation.id, {
       status: statusDraft,
       notes: notesDraft,
+    });
+  }
+
+  async function saveLeadAction() {
+    if (!activeConversation) return;
+    await onSave(activeConversation.id, {
+      status: statusDraft,
+      notes: notesDraft,
+      actionType: actionTypeDraft,
       actionText: actionDraft,
     });
+    setActionTypeDraft("follow_up");
     setActionDraft("");
+  }
+
+  async function deleteActive() {
+    if (!activeConversation) return;
+    await onDelete(activeConversation.id);
+    setIsDetailsOpen(false);
+  }
+
+  function openConversationDetails(conversationId) {
+    setActiveId(conversationId);
+    setIsDetailsOpen(true);
+  }
+
+  async function geolocateStoredConversationIps() {
+    setIsGeolocating(true);
+
+    try {
+      await onGeolocate();
+    } finally {
+      setIsGeolocating(false);
+    }
   }
 
   return (
@@ -1791,6 +1978,9 @@ function ConversationsSection({
       <div className={styles.panelHeader}>
         <div className={styles.titleBlock}>
           <h1>Conversations</h1>
+          <p className={styles.muted}>
+            Review visitor chats, tracking details, notes, and follow-up actions.
+          </p>
         </div>
         <button className={styles.ghostButton} onClick={onRefresh} disabled={busy}>
           <FiRefreshCw aria-hidden="true" />
@@ -1798,26 +1988,42 @@ function ConversationsSection({
         </button>
       </div>
 
-      <div className={styles.statsGrid}>
-        <Stat label="open" value={counts.open || 0} />
-        <Stat label="reviewing" value={counts.reviewing || 0} />
-        <Stat label="qualified" value={counts.qualified || 0} />
-        <Stat label="closed" value={counts.closed || 0} />
+      <div className={styles.conversationStats} aria-label="Conversation filters">
+        {[
+          {
+            value: "",
+            label: "total",
+            count: Object.values(counts || {}).reduce(
+              (total, value) => total + (Number(value) || 0),
+              0
+            ),
+          },
+          {value: "open", label: "open", count: counts.open || 0},
+          {value: "reviewing", label: "reviewing", count: counts.reviewing || 0},
+          {value: "qualified", label: "qualified", count: counts.qualified || 0},
+          {value: "closed", label: "closed", count: counts.closed || 0},
+          {value: "spam", label: "spam", count: counts.spam || 0},
+        ].map((chip) => (
+          <button
+            key={chip.value || "total"}
+            type="button"
+            className={`${styles.conversationStatChip} ${
+              filter.status === chip.value ? styles.conversationStatChipActive : ""
+            }`}
+            aria-pressed={filter.status === chip.value}
+            onClick={() => setFilter((current) => ({...current, status: chip.value}))}
+          >
+            {chip.count} {chip.label}
+          </button>
+        ))}
       </div>
 
-      <div className={styles.filterRow}>
-        <SelectField
-          label="Status"
-          options={CONVERSATION_STATUSES}
-          value={filter.status}
-          onChange={(status) =>
-            setFilter((current) => ({...current, status}))
-          }
-        />
+      <div className={styles.conversationFilterRow}>
         <label className={styles.field}>
           Search
           <input
             value={filter.q}
+            placeholder="Name, email, phone, message, or ID"
             onChange={(event) =>
               setFilter((current) => ({...current, q: event.target.value}))
             }
@@ -1826,137 +2032,332 @@ function ConversationsSection({
       </div>
 
       <div className={styles.conversationWorkspace}>
-        <div className={styles.conversationList}>
+        <section className={styles.conversationListPanel}>
+          <div className={styles.panelHeader}>
+            <div className={styles.titleBlock}>
+              <h2>Conversation list</h2>
+              <p className={styles.muted}>
+                Select a row to inspect activity and manage status.
+              </p>
+            </div>
+            <div className={styles.sectionActions}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                disabled={busy || isGeolocating}
+                title="Re-geolocate stored conversation IP addresses"
+                onClick={() => void geolocateStoredConversationIps()}
+              >
+                <FiRefreshCw aria-hidden="true" />
+                {isGeolocating ? "Geolocating..." : "Re-geolocate stored IPs"}
+              </button>
+            </div>
+          </div>
+
+          <ConversationMap
+            activeConversationId={activeConversation?.id || ""}
+            conversations={conversations}
+            onSelectConversation={openConversationDetails}
+          />
+
+          <div className={styles.conversationList} aria-label="Conversations">
+            <div className={styles.conversationListHeader} aria-hidden="true">
+              <span>Visitor</span>
+              <span>Status</span>
+              <span>Messages</span>
+              <span>Activity</span>
+              <span>Updated</span>
+            </div>
+
           {conversations.map((conversation) => (
             <button
               key={conversation.id}
               type="button"
-              className={`${styles.conversationItem} ${
+              className={`${styles.conversationListRow} ${
                 activeConversation?.id === conversation.id
-                  ? styles.conversationItemActive
+                  ? styles.conversationListRowActive
                   : ""
               }`}
-              onClick={() => setActiveId(conversation.id)}
+              onClick={() => openConversationDetails(conversation.id)}
             >
-              <strong>
-                {conversation.user?.name ||
-                  conversation.user?.email ||
-                  conversation.conversation_id}
-              </strong>
-              <span>{conversation.preview || "No messages"}</span>
-              <small>
-                {conversation.status} · {formatDateTime(conversation.updated_at)}
-              </small>
+              <span className={styles.conversationIdentity}>
+                <strong>{conversationTitle(conversation)}</strong>
+                <small>{conversationContactLine(conversation)}</small>
+              </span>
+              <span className={styles.statusBadge}>
+                {CONVERSATION_STATUS_LABELS[conversation.status] ||
+                  conversation.status ||
+                  "Open"}
+              </span>
+              <span className={styles.conversationMessageSummary}>
+                <strong>{conversationMessageCountLabel(conversation)}</strong>
+                <small>{conversation.preview || "No messages"}</small>
+              </span>
+              <span className={styles.conversationActivityPreview}>
+                <strong>{conversationActionsCountLabel(conversation)}</strong>
+                <small>{conversationActionsPreview(conversation)}</small>
+              </span>
+              <span className={styles.conversationTime}>
+                {formatDateTime(conversation.updated_at || conversation.created_at)}
+              </span>
             </button>
           ))}
+
           {conversations.length === 0 ? (
             <div className={styles.emptyState}>No conversations found.</div>
           ) : null}
-        </div>
+          </div>
+        </section>
+      </div>
 
-        <div className={styles.conversationDetail}>
-          {activeConversation ? (
-            <>
-              <div className={styles.detailHeader}>
-                <div>
-                  <h2>
-                    {activeConversation.user?.name ||
-                      activeConversation.user?.email ||
-                      "Conversation"}
-                  </h2>
-                  <p>
-                    {activeConversation.user?.email || "No email"} ·{" "}
-                    {activeConversation.user?.phone || "No phone"}
-                  </p>
-                </div>
+      {isDetailsOpen && activeConversation ? (
+        <div
+          className={styles.conversationModalBackdrop}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsDetailsOpen(false);
+            }
+          }}
+        >
+          <section
+            aria-labelledby="conversation-details-title"
+            aria-modal="true"
+            className={styles.conversationModalPanel}
+            role="dialog"
+          >
+            <div className={styles.conversationModalHeader}>
+              <div className={styles.titleBlock}>
+                <h2 id="conversation-details-title">
+                  {conversationTitle(activeConversation)}
+                </h2>
+                <p className={styles.muted}>
+                  {conversationSourceLabel(activeConversation)} -{" "}
+                  {activeConversation.conversation_id}
+                </p>
+              </div>
+              <div className={styles.conversationModalHeaderActions}>
+                <label className={styles.conversationHeaderStatusField}>
+                  <span>Lead status</span>
+                  <select
+                    value={statusDraft}
+                    disabled={busy}
+                    onChange={(event) => setStatusDraft(event.target.value)}
+                  >
+                    {CONVERSATION_STATUSES.filter((status) => status.value).map(
+                      (status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  disabled={busy || !hasDetailChanges}
+                  onClick={() => void saveLeadDetails()}
+                >
+                  <FiSave aria-hidden="true" />
+                  {busy ? "Saving..." : "Save details"}
+                </button>
                 <button
                   type="button"
                   className={styles.iconDangerButton}
-                  title="Delete"
-                  onClick={() => onDelete(activeConversation.id)}
+                  title="Delete conversation"
+                  onClick={() => void deleteActive()}
                 >
                   <FiTrash2 aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label="Close conversation details"
+                  title="Close"
+                  onClick={() => setIsDetailsOpen(false)}
+                >
+                  <FiX aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.conversationModalBody}>
+              <div className={styles.conversationDetailGrid}>
+                <div>
+                  <span>Email</span>
+                  <strong>{activeConversation.user?.email || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Phone</span>
+                  <strong>{activeConversation.user?.phone || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Source</span>
+                  <strong>{conversationSourceLabel(activeConversation)}</strong>
+                </div>
+                <div>
+                  <span>Created</span>
+                  <strong>{formatDateTime(activeConversation.created_at)}</strong>
+                </div>
+                <div>
+                  <span>Updated</span>
+                  <strong>{formatDateTime(activeConversation.updated_at)}</strong>
+                </div>
+                <div>
+                  <span>Messages</span>
+                  <strong>{conversationMessageCountLabel(activeConversation)}</strong>
+                </div>
               </div>
 
-              <div className={styles.locationBand}>
-                <FiMapPin aria-hidden="true" />
-                <span>{normalizeLocation(activeConversation.tracking)}</span>
-                <small>{activeConversation.tracking?.ip || "No IP"}</small>
+              <div className={styles.conversationTrackingGrid}>
+                <div>
+                  <span>IP</span>
+                  <strong>{activeConversation.tracking?.ip || "Unknown"}</strong>
+                </div>
+                <div>
+                  <span>Country</span>
+                  <strong>
+                    {activeConversation.tracking?.country ||
+                      activeConversation.tracking?.countryCode ||
+                      "Unknown"}
+                  </strong>
+                </div>
+                <div>
+                  <span>State</span>
+                  <strong>
+                    {activeConversation.tracking?.state ||
+                      activeConversation.tracking?.region ||
+                      "Unknown"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Address</span>
+                  <strong>{normalizeLocation(activeConversation.tracking)}</strong>
+                </div>
+                <div className={styles.conversationWideDetail}>
+                  <span>Page</span>
+                  <strong>
+                    {activeConversation.tracking?.pageUrl ||
+                      activeConversation.tracking?.referrer ||
+                      "Unknown"}
+                  </strong>
+                </div>
+                <div className={styles.conversationWideDetail}>
+                  <span>User agent</span>
+                  <strong>{activeConversation.tracking?.userAgent || "Unknown"}</strong>
+                </div>
               </div>
 
-              {activeMapUrl ? (
-                <iframe
-                  className={styles.mapFrame}
-                  src={activeMapUrl}
-                  title="Conversation location map"
-                  loading="lazy"
-                />
-              ) : (
-                <div className={styles.mapPlaceholder}>No map coordinates.</div>
-              )}
-
-              <div className={styles.formGridCompact}>
-                <SelectField
-                  label="Status"
-                  options={CONVERSATION_STATUSES.filter((status) => status.value)}
-                  value={statusDraft}
-                  onChange={setStatusDraft}
-                />
+              <div className={styles.conversationManageGrid}>
                 <label className={styles.field}>
-                  Notes
+                  Lead notes
                   <textarea
                     value={notesDraft}
+                    placeholder="Keep internal context for this lead."
                     onChange={(event) => setNotesDraft(event.target.value)}
                   />
                 </label>
-                <label className={styles.field}>
-                  Action
-                  <textarea
-                    value={actionDraft}
-                    onChange={(event) => setActionDraft(event.target.value)}
-                  />
-                </label>
               </div>
 
-              <button className={styles.primaryButton} onClick={saveActive} disabled={busy}>
-                <FiSave aria-hidden="true" />
-                Save conversation
-              </button>
-
-              <div className={styles.messageList}>
-                {activeConversation.messages.map((message, index) => (
-                  <div
-                    key={`${message.role}-${index}`}
-                    className={`${styles.messageBubble} ${
-                      message.role === "assistant"
-                        ? styles.messageAssistant
-                        : styles.messageUser
-                    }`}
-                  >
-                    <strong>{message.role}</strong>
-                    <p>{message.message}</p>
+              <section className={styles.conversationActivityComposer}>
+                <div className={styles.conversationActivityComposerHeader}>
+                  <div>
+                    <h3>Lead activity</h3>
+                    <p>Log each touchpoint so follow-ups, calls, emails, and qualification work stay traceable.</p>
                   </div>
-                ))}
+                  <span>{conversationActionsCountLabel(activeConversation)}</span>
+                </div>
+
+                <div className={styles.conversationActionDraftGrid}>
+                  <SelectField
+                    label="Activity category"
+                    options={CONVERSATION_ACTION_TYPES}
+                    value={actionTypeDraft}
+                    onChange={setActionTypeDraft}
+                  />
+                  <label className={styles.field}>
+                    Activity details
+                    <textarea
+                      value={actionDraft}
+                      onChange={(event) => setActionDraft(event.target.value)}
+                      placeholder="Describe the call, email, meeting, follow-up, or next step."
+                    />
+                  </label>
+                </div>
+
+                <button
+                  className={styles.primaryButton}
+                  onClick={() => void saveLeadAction()}
+                  disabled={busy || !hasActionDraft}
+                >
+                  <FiSave aria-hidden="true" />
+                  {busy ? "Saving..." : "Log activity"}
+                </button>
+              </section>
+
+              <div className={styles.conversationActionSection}>
+                <div className={styles.conversationSectionHeader}>
+                  <h3>Action history</h3>
+                  <span>{conversationActionsCountLabel(activeConversation)}</span>
+                </div>
+
+                {activeActions.length > 0 ? (
+                  <div className={styles.conversationActionList}>
+                    {activeActions.map((action, index) => (
+                      <article
+                        key={action.id || `${action.createdAt}-${index}`}
+                        className={styles.conversationActionItem}
+                      >
+                        <div className={styles.conversationActionMeta}>
+                          <div>
+                            <strong>
+                              {conversationActionTypeLabel(action.type)}
+                            </strong>
+                            <small>{action.createdBy || "Admin action"}</small>
+                          </div>
+                          <span>{formatDateTime(action.createdAt)}</span>
+                        </div>
+                        <p>{action.text}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.conversationActionEmpty}>
+                    No actions logged yet.
+                  </p>
+                )}
               </div>
 
-              {activeConversation.actions?.length ? (
-                <div className={styles.actionList}>
-                  <h2>Actions</h2>
-                  {activeConversation.actions.map((action, index) => (
-                    <div key={`${action.createdAt}-${index}`} className={styles.actionItem}>
-                      <strong>{formatDateTime(action.createdAt)}</strong>
-                      <span>{action.text}</span>
+              <div className={styles.conversationTranscriptSection}>
+                <div className={styles.conversationSectionHeader}>
+                  <h3>Messages</h3>
+                  <span>{conversationMessageCountLabel(activeConversation)}</span>
+                </div>
+                <div className={styles.messageList}>
+                  {activeMessages.map((message, index) => (
+                    <div
+                      key={`${message.role}-${index}`}
+                      className={`${styles.messageBubble} ${
+                        message.role === "assistant"
+                          ? styles.messageAssistant
+                          : styles.messageUser
+                      }`}
+                    >
+                      <strong>{message.role}</strong>
+                      <p>{message.message}</p>
                     </div>
                   ))}
+                  {activeMessages.length === 0 ? (
+                    <p className={styles.conversationActionEmpty}>
+                      No messages stored.
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
-            </>
-          ) : (
-            <div className={styles.emptyState}>Select a conversation.</div>
-          )}
+              </div>
+            </div>
+          </section>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -2196,6 +2597,45 @@ export default function AdminDashboard({user}) {
     }, "Conversation deleted.");
   }
 
+  async function geolocateConversations() {
+    setBusy(true);
+    setToast(null);
+
+    try {
+      const data = await fetchJson("/api/admin/conversations/geolocate", {
+        method: "POST",
+        body: JSON.stringify({force: true, limit: 100}),
+      });
+      await loadConversations();
+
+      const summary = data.summary || {};
+      const updated = Number(summary.updated) || 0;
+      const lookedUp = Number(summary.lookedUp) || 0;
+      const failed = Number(summary.failed) || 0;
+      const baseMessage =
+        updated > 0
+          ? `Updated ${updated} conversation location${
+              updated === 1 ? "" : "s"
+            } from ${lookedUp} stored IP lookup${lookedUp === 1 ? "" : "s"}.`
+          : lookedUp > 0
+          ? `No conversation locations changed after ${lookedUp} stored IP lookup${
+              lookedUp === 1 ? "" : "s"
+            }.`
+          : "No stored conversation IPs need geolocation.";
+
+      showToast(
+        failed > 0 && updated === 0 ? "error" : failed > 0 ? "warning" : "success",
+        failed > 0
+          ? `${baseMessage} ${failed} lookup${failed === 1 ? "" : "s"} failed.`
+          : baseMessage
+      );
+    } catch (error) {
+      showToast("error", error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const adminStatus = busy
     ? {label: "Working", className: styles.statusPillWorking}
     : {label: "Ready", className: styles.statusPillReady};
@@ -2280,6 +2720,7 @@ export default function AdminDashboard({user}) {
             counts={conversationCounts}
             filter={conversationFilter}
             setFilter={setConversationFilter}
+            onGeolocate={geolocateConversations}
             onRefresh={() => runTask(loadConversations, "")}
             onSave={saveConversation}
             onDelete={deleteConversation}

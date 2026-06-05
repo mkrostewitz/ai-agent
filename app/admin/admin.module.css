@@ -307,7 +307,8 @@
 }
 
 .titleBlock p,
-.integrationPanel p {
+.integrationPanel p,
+.muted {
   margin: 0;
   color: #657482;
   font-size: 0.9rem;
@@ -972,8 +973,9 @@
 .previewPane,
 .localePanel,
 .stat,
-.conversationDetail,
+.conversationListPanel,
 .conversationList,
+.conversationModalPanel,
 .tableShell {
   border: 1px solid #d8e0e6;
   border-radius: 8px;
@@ -1092,8 +1094,7 @@
   font-size: 0.88rem;
 }
 
-.documentRow strong,
-.conversationItem strong {
+.documentRow strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1126,56 +1127,395 @@
 
 .conversationWorkspace {
   display: grid;
-  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.55fr);
   gap: 18px;
   align-items: start;
 }
 
-.conversationList {
-  max-height: 760px;
-  overflow: auto;
-  padding: 8px;
+.conversationStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.conversationItem {
-  width: 100%;
+.conversationStatChip,
+.statusBadge {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d8e0e6;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #51616f;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.conversationStatChip {
+  cursor: pointer;
+  font: inherit;
+}
+
+.conversationStatChip:hover,
+.conversationStatChipActive {
+  border-color: #0f766e;
+  background: #d9f2ef;
+  color: #0b514c;
+}
+
+.conversationFilterRow {
   display: grid;
-  gap: 5px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 12px;
-  background: transparent;
+  grid-template-columns: minmax(260px, 520px);
+  gap: 14px;
+}
+
+.conversationListPanel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  padding: 18px;
+  background: #f8fafb;
+}
+
+.conversationMap,
+.conversationMapPlaceholder {
+  position: relative;
+  min-height: 340px;
+  overflow: hidden;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #eef2f4;
+}
+
+.conversationMapTiles {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  opacity: 0.86;
+}
+
+.conversationMapTiles img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.conversationMap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
+    radial-gradient(circle at 50% 50%, transparent 42%, rgba(20, 33, 43, 0.1));
+}
+
+.conversationMapPlaceholder {
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  color: #657482;
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.conversationMapMarker {
+  position: absolute;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  padding: 0;
+  background: #0f766e;
+  box-shadow: 0 8px 18px rgba(20, 33, 43, 0.24);
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition:
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.conversationMapMarker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.conversationMapMarker:hover,
+.conversationMapMarkerActive {
+  background: #b42318;
+  transform: translate(-50%, -50%) scale(1.14);
+}
+
+.conversationMapMeta {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(216, 224, 230, 0.86);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.9);
   color: #253541;
+  font-size: 0.82rem;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(20, 33, 43, 0.12);
+}
+
+.conversationMapMeta span {
+  color: #657482;
+}
+
+.conversationList {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.conversationListHeader,
+.conversationListRow {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.25fr) minmax(112px, 0.45fr) minmax(220px, 1.1fr)
+    minmax(220px, 1.05fr) minmax(150px, 0.65fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.conversationListHeader {
+  border-bottom: 1px solid #d8e0e6;
+  padding: 10px 12px;
+  background: #eef2f4;
+  color: #51616f;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.conversationListRow {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #e5eaee;
+  padding: 12px;
+  background: #ffffff;
+  color: #253541;
+  cursor: pointer;
+  font: inherit;
   text-align: left;
 }
 
-.conversationItemActive {
+.conversationListRow:last-child {
+  border-bottom: 0;
+}
+
+.conversationListRow:hover,
+.conversationListRowActive {
   border-color: #0f766e;
   background: #d9f2ef;
 }
 
-.conversationItem span {
-  color: #51616f;
-  font-size: 0.88rem;
+.conversationListRow > span,
+.conversationIdentity,
+.conversationMessageSummary,
+.conversationActivityPreview {
+  min-width: 0;
 }
 
-.conversationItem small {
-  color: #657482;
-  font-size: 0.78rem;
+.conversationIdentity,
+.conversationMessageSummary,
+.conversationActivityPreview {
+  display: grid;
+  gap: 4px;
+}
+
+.conversationIdentity strong,
+.conversationIdentity small,
+.conversationMessageSummary strong,
+.conversationMessageSummary small,
+.conversationActivityPreview strong,
+.conversationActivityPreview small,
+.conversationTime {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.conversationIdentity small,
+.conversationMessageSummary small,
+.conversationActivityPreview small,
+.conversationTime {
+  color: #51616f;
+  font-size: 0.82rem;
+}
+
+.conversationMessageSummary small,
+.conversationActivityPreview small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.conversationMessageSummary strong,
+.conversationActivityPreview strong {
+  color: #253541;
+  font-size: 0.86rem;
+}
+
+.conversationTime {
   font-weight: 800;
 }
 
-.conversationDetail {
+.conversationModalBackdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 0.58);
 }
 
-.detailHeader p {
-  margin: 4px 0 0;
+.conversationModalPanel {
+  width: min(100%, 1160px);
+  max-height: min(900px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 22px 70px rgba(20, 33, 43, 0.18);
+}
+
+.conversationModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #d8e0e6;
+  padding: 24px;
+}
+
+.conversationModalHeaderActions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.conversationModalHeaderActions .iconButton {
+  display: inline-flex;
+}
+
+.conversationHeaderStatusField {
+  min-width: 190px;
+  display: grid;
+  gap: 6px;
   color: #657482;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.conversationHeaderStatusField select {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid #cbd5dc;
+  border-radius: 999px;
+  padding: 8px 34px 8px 13px;
+  background: #ffffff;
+  color: #14212b;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.conversationModalBody {
+  display: grid;
+  gap: 18px;
+  overflow: auto;
+  padding: 24px;
+}
+
+.conversationDetailGrid,
+.conversationTrackingGrid,
+.conversationManageGrid,
+.conversationActionDraftGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.conversationDetailGrid,
+.conversationTrackingGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.conversationManageGrid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.conversationActionDraftGrid {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.conversationDetailGrid div,
+.conversationTrackingGrid div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f8fafb;
+}
+
+.conversationDetailGrid span,
+.conversationTrackingGrid span {
+  color: #657482;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.conversationDetailGrid strong,
+.conversationTrackingGrid strong {
+  color: #14212b;
+  font-size: clamp(1rem, 1.35vw, 1.22rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.conversationWideDetail {
+  grid-column: 1 / -1;
 }
 
 .locationBand {
@@ -1212,41 +1552,201 @@
   font-weight: 800;
 }
 
-.formGridCompact {
-  grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr);
+.conversationModalActions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
 }
 
-.messageList,
-.actionList {
+.conversationManageGrid textarea {
+  min-height: 110px;
+}
+
+.conversationActivityComposer textarea {
+  min-height: 120px;
+}
+
+.conversationActivityComposer {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #cbd5dc;
+  border-left: 4px solid #0f766e;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(20, 33, 43, 0.06);
+}
+
+.conversationActivityComposerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.conversationActivityComposerHeader div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.conversationActivityComposerHeader h3,
+.conversationActivityComposerHeader p {
+  margin: 0;
+}
+
+.conversationActivityComposerHeader h3 {
+  color: #14212b;
+  font-size: 1.02rem;
+}
+
+.conversationActivityComposerHeader p {
+  color: #657482;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.conversationActivityComposerHeader span {
+  flex: 0 0 auto;
+  color: #657482;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.conversationActivityComposer > .primaryButton {
+  justify-self: end;
+}
+
+.conversationActionList,
+.conversationActionSection,
+.conversationTranscriptSection {
   display: grid;
   gap: 10px;
 }
 
+.conversationTranscriptSection {
+  border: 1px solid #cbd5dc;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(20, 33, 43, 0.06);
+}
+
+.messageList {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.conversationSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.conversationSectionHeader h3 {
+  margin: 0;
+  color: #14212b;
+  font-size: 1rem;
+}
+
+.conversationSectionHeader span {
+  color: #657482;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .messageBubble {
+  width: fit-content;
+  max-width: min(66%, 680px);
   display: grid;
   gap: 5px;
-  border-radius: 8px;
-  padding: 12px;
+  border: 1px solid #d8e0e6;
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: none;
 }
 
 .messageBubble strong {
-  font-size: 0.78rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
 .messageBubble p {
   margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.92rem;
+  line-height: 1.45;
   white-space: pre-wrap;
 }
 
 .messageUser {
-  background: #ecf4ff;
-  color: #16345c;
+  justify-self: end;
+  border-bottom-right-radius: 4px;
+  border-color: #d8ccef;
+  background: #f6f0ff;
+  color: #3f2673;
 }
 
 .messageAssistant {
-  background: #eef7ec;
-  color: #1e4620;
+  justify-self: start;
+  border-bottom-left-radius: 4px;
+  background: #f8fafb;
+  color: #253541;
+}
+
+.conversationActionItem,
+.conversationActionEmpty {
+  border: 1px solid #d8e0e6;
+  border-radius: 6px;
+  padding: 10px;
+  background: #f8fafb;
+}
+
+.conversationActionItem {
+  display: grid;
+  gap: 7px;
+}
+
+.conversationActionMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: #657482;
+  font-size: 0.82rem;
+}
+
+.conversationActionMeta div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.conversationActionMeta strong,
+.conversationActionMeta span,
+.conversationActionMeta small {
+  overflow-wrap: anywhere;
+}
+
+.conversationActionMeta strong {
+  color: #14212b;
+  font-size: 0.9rem;
+}
+
+.conversationActionMeta small {
+  color: #657482;
+  font-size: 0.78rem;
+}
+
+.conversationActionItem p,
+.conversationActionEmpty {
+  margin: 0;
+  color: #253541;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .actionItem {
@@ -1505,6 +2005,21 @@
   .documentRow span {
     display: none;
   }
+
+  .conversationListHeader {
+    display: none;
+  }
+
+  .conversationListRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .conversationMessageSummary,
+  .conversationActivityPreview,
+  .conversationTime {
+    grid-column: 1 / -1;
+  }
+
 }
 
 @media (max-width: 760px) {
@@ -1543,6 +2058,7 @@
 
   .topBand,
   .panelHeader,
+  .conversationModalHeader,
   .sectionHeader,
   .detailHeader,
   .integrationHeader {
@@ -1552,6 +2068,7 @@
 
   .topActions,
   .sectionActions,
+  .conversationModalHeaderActions,
   .modalActions {
     align-items: stretch;
     justify-content: stretch;
@@ -1583,6 +2100,11 @@
   .mailAccountGrid,
   .mailServerGrid,
   .filterRow,
+  .conversationFilterRow,
+  .conversationDetailGrid,
+  .conversationTrackingGrid,
+  .conversationManageGrid,
+  .conversationActionDraftGrid,
   .formGridCompact,
   .websiteOptions,
   .embedControls {
@@ -1606,8 +2128,38 @@
     padding: 10px;
   }
 
+  .conversationModalBackdrop {
+    align-items: stretch;
+    padding: 10px;
+  }
+
   .modalPanel {
     max-height: calc(100vh - 20px);
+  }
+
+  .conversationModalPanel {
+    max-height: calc(100vh - 20px);
+  }
+
+  .conversationMap,
+  .conversationMapPlaceholder {
+    min-height: 260px;
+  }
+
+  .conversationHeaderStatusField {
+    width: 100%;
+  }
+
+  .conversationActivityComposerHeader {
+    flex-direction: column;
+  }
+
+  .conversationActivityComposer > .primaryButton {
+    width: 100%;
+  }
+
+  .messageBubble {
+    max-width: 88%;
   }
 
   .ipGeoControls {
@@ -1689,8 +2241,13 @@
 .previewPane,
 .localePanel,
 .stat,
-.conversationDetail,
+.conversationListPanel,
+.conversationMap,
+.conversationMapPlaceholder,
 .conversationList,
+.conversationModalPanel,
+.conversationActivityComposer,
+.conversationTranscriptSection,
 .tableShell,
 .setupNote,
 .agentSettingsPanel,
@@ -1711,8 +2268,13 @@
 .previewPane,
 .localePanel,
 .stat,
-.conversationDetail,
+.conversationListPanel,
+.conversationMap,
+.conversationMapPlaceholder,
 .conversationList,
+.conversationModalPanel,
+.conversationActivityComposer,
+.conversationTranscriptSection,
 .tableShell,
 .embedAgentSummary,
 .segmentedControl {
@@ -1749,8 +2311,20 @@
 .field textarea,
 .field select,
 .selectButton,
+.conversationHeaderStatusField select,
 .locationBand,
 .messageBubble,
+.conversationListPanel,
+.conversationMap,
+.conversationMapPlaceholder,
+.conversationList,
+.conversationModalPanel,
+.conversationActivityComposer,
+.conversationTranscriptSection,
+.conversationDetailGrid div,
+.conversationTrackingGrid div,
+.conversationActionItem,
+.conversationActionEmpty,
 .toast {
   border-radius: 10px;
 }
@@ -1760,11 +2334,19 @@
 .integrationPanel p,
 .fieldHint,
 .emptyState,
-.conversationItem span,
-.conversationItem small,
+.conversationIdentity small,
+.conversationMessageSummary small,
+.conversationActivityPreview small,
+.conversationTime,
+.conversationMapMeta span,
+.conversationSectionHeader span,
+.conversationActivityComposerHeader p,
+.conversationActivityComposerHeader span,
+.conversationActionMeta,
+.conversationActionMeta small,
 .detailHeader p,
 .locationBand small,
-.actionItem strong,
+.conversationActionMeta span,
 .agentPreviewHeader span,
 .embedAgentSummary span,
 .stat span {
@@ -1781,7 +2363,14 @@
 .integrationPanel h2,
 .field,
 .documentRow,
-.conversationItem,
+.conversationListRow,
+.conversationMapMeta,
+.conversationDetailGrid strong,
+.conversationTrackingGrid strong,
+.conversationActivityComposerHeader h3,
+.conversationActionMeta strong,
+.conversationActionItem p,
+.conversationActionEmpty,
 .locationBand,
 .stat strong {
   color: var(--text);
@@ -1802,7 +2391,10 @@
 }
 
 .navTabActive,
-.conversationItemActive,
+.conversationListRow:hover,
+.conversationListRowActive,
+.conversationStatChip:hover,
+.conversationStatChipActive,
 .segmentedButtonActive {
   border-color: var(--card-border-strong);
   background: var(--brand-muted);
@@ -1830,6 +2422,8 @@
 .ghostButton,
 .iconButton,
 .modalCloseButton,
+.statusBadge,
+.conversationStatChip,
 .segmentedButton,
 .inlineHelpButton,
 .helpCloseButton {
@@ -1859,6 +2453,7 @@
 .field input,
 .field textarea,
 .field select,
+.conversationHeaderStatusField select,
 .selectButton,
 .selectMenu {
   border-color: rgba(88, 26, 208, 0.16);
@@ -1917,8 +2512,7 @@
 
 .largeTextarea,
 .embedSnippetShell,
-.embedShell,
-.messageAssistant {
+.embedShell {
   background: var(--code-panel);
   color: #dbeafe;
 }
@@ -1980,13 +2574,20 @@
 }
 
 .messageUser {
-  background: #f3eaff;
+  border-color: rgba(88, 26, 208, 0.12);
+  background: rgba(110, 38, 245, 0.08);
   color: #3f2673;
+}
+
+.messageAssistant {
+  border-color: var(--card-border);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
 }
 
 .messageAssistant strong,
 .messageAssistant p {
-  color: #dbeafe;
+  color: var(--text);
 }
 
 .toast {

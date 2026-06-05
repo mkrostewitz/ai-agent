@@ -1,4 +1,5 @@
 import {NextResponse} from "next/server";
+import {randomUUID} from "crypto";
 
 import {requireAdminApi} from "@/app/lib/adminAuth";
 import {getDb} from "@/app/lib/mongo";
@@ -8,6 +9,14 @@ export const runtime = "nodejs";
 const CONVERSATIONS_COLLECTION =
   process.env.MONGODB_CONVERSATIONS_COLLECTION || "conversations";
 const STATUSES = new Set(["open", "reviewing", "qualified", "closed", "spam"]);
+const ACTION_TYPES = new Set([
+  "follow_up",
+  "call",
+  "email",
+  "meeting",
+  "qualification",
+  "note",
+]);
 
 function cleanString(value) {
   return String(value || "").trim();
@@ -23,6 +32,7 @@ export async function PATCH(request, {params}) {
     const status = cleanString(body.status);
     const notes = typeof body.notes === "string" ? body.notes : undefined;
     const actionText = cleanString(body.actionText);
+    const actionType = cleanString(body.actionType) || "follow_up";
     const update = {
       $set: {
         updated_at: new Date(),
@@ -41,10 +51,16 @@ export async function PATCH(request, {params}) {
     }
 
     if (actionText) {
+      if (!ACTION_TYPES.has(actionType)) {
+        return NextResponse.json({error: "Invalid action type."}, {status: 400});
+      }
+
       update.$push = {
         actions: {
           $each: [
             {
+              id: randomUUID(),
+              type: actionType,
               text: actionText,
               createdAt: new Date(),
               createdBy: auth.user.email,
