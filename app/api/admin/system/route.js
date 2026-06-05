@@ -15,11 +15,15 @@ function secretPreview(value) {
 
 async function integrationsResponse(config = {}) {
   const apiKey = String(config?.ipGeolocationApiKey || "").trim();
+  const mapboxToken = String(config?.mapboxToken || "").trim();
 
   return {
     integrations: {
       ipGeolocationConfigured: Boolean(apiKey),
       ipGeolocationApiKeyPreview: secretPreview(apiKey),
+      mapboxConfigured: Boolean(mapboxToken),
+      mapboxToken,
+      mapboxTokenPreview: secretPreview(mapboxToken),
       mail: await getMailDeliveryStatus(),
     },
   };
@@ -53,11 +57,20 @@ export async function PUT(request) {
       : typeof body.ipGeolocationApiKey === "string"
       ? body.ipGeolocationApiKey
       : undefined;
+    const nextMapboxToken = body.clearMapboxToken
+      ? ""
+      : typeof body.mapboxToken === "string"
+      ? body.mapboxToken
+      : undefined;
 
     const updatePayload = {};
 
     if (typeof nextApiKey === "string") {
       updatePayload.ipGeolocationApiKey = nextApiKey;
+    }
+
+    if (typeof nextMapboxToken === "string") {
+      updatePayload.mapboxToken = nextMapboxToken;
     }
 
     if (body.mail && typeof body.mail === "object" && !Array.isArray(body.mail)) {

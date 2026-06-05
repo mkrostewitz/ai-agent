@@ -42,10 +42,12 @@ export default function SetupForm() {
     password: "",
     confirmPassword: "",
     ipGeolocationApiKey: "",
+    mapboxToken: "",
   });
   const [error, setError] = useState("");
   const [databaseStatus, setDatabaseStatus] = useState(INITIAL_DATABASE_STATUS);
   const [isIpGeolocationHelpOpen, setIsIpGeolocationHelpOpen] = useState(false);
+  const [isMapboxHelpOpen, setIsMapboxHelpOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function updateField(key, value) {
@@ -154,6 +156,7 @@ export default function SetupForm() {
           email: form.email,
           password: form.password,
           ipGeolocationApiKey: form.ipGeolocationApiKey,
+          mapboxToken: form.mapboxToken,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -340,6 +343,61 @@ export default function SetupForm() {
             }
             autoComplete="off"
             placeholder="Optional API key"
+          />
+        </div>
+
+        <div className={`${styles.field} ${styles.ipGeoField}`}>
+          <div className={styles.fieldHeader}>
+            <span>Mapbox public token</span>
+            <div className={styles.helpAnchor}>
+              <button
+                type="button"
+                className={styles.inlineHelpButton}
+                aria-label="Show Mapbox token setup help"
+                aria-expanded={isMapboxHelpOpen}
+                onClick={() =>
+                  setIsMapboxHelpOpen((currentValue) => !currentValue)
+                }
+              >
+                <FiHelpCircle aria-hidden="true" />
+              </button>
+              {isMapboxHelpOpen ? (
+                <div className={styles.helpPopover} role="dialog">
+                  <div className={styles.helpPopoverHeader}>
+                    <strong>Mapbox setup</strong>
+                    <button
+                      type="button"
+                      className={styles.helpCloseButton}
+                      aria-label="Close Mapbox token setup help"
+                      onClick={() => setIsMapboxHelpOpen(false)}
+                    >
+                      <FiX aria-hidden="true" />
+                    </button>
+                  </div>
+                  <p>
+                    Create a public Mapbox access token and paste it here. The
+                    admin dashboard uses it in the browser to render the
+                    conversation location map.
+                  </p>
+                  <a
+                    href="https://account.mapbox.com/access-tokens/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open Mapbox access tokens{" "}
+                    <FiExternalLink aria-hidden="true" />
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <input
+            value={form.mapboxToken}
+            onChange={(event) =>
+              updateField("mapboxToken", event.target.value)
+            }
+            autoComplete="off"
+            placeholder="Optional public token"
           />
         </div>
 

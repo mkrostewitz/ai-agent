@@ -1192,30 +1192,14 @@
   background: #eef2f4;
 }
 
-.conversationMapTiles {
+.conversationMapCanvas {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  opacity: 0.86;
 }
 
-.conversationMapTiles img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
-.conversationMap::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
-    radial-gradient(circle at 50% 50%, transparent 42%, rgba(20, 33, 43, 0.1));
+.conversationMap :global(.mapboxgl-ctrl-bottom-left),
+.conversationMap :global(.mapboxgl-ctrl-bottom-right) {
+  z-index: 2;
 }
 
 .conversationMapPlaceholder {
@@ -1229,44 +1213,22 @@
 }
 
 .conversationMapMarker {
-  position: absolute;
-  z-index: 2;
-  width: 18px;
-  height: 18px;
-  border: 2px solid #ffffff;
-  border-radius: 999px;
-  padding: 0;
-  background: #0f766e;
-  box-shadow: 0 8px 18px rgba(20, 33, 43, 0.24);
   cursor: pointer;
-  transform: translate(-50%, -50%);
-  transition:
-    background 0.16s ease,
-    transform 0.16s ease;
+  filter: drop-shadow(0 8px 14px rgba(20, 33, 43, 0.22));
 }
 
-.conversationMapMarker::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid #ffffff;
-  border-bottom: 2px solid #ffffff;
-  background: inherit;
-  transform: translateX(-50%) rotate(45deg);
-}
-
-.conversationMapMarker:hover,
 .conversationMapMarkerActive {
-  background: #b42318;
-  transform: translate(-50%, -50%) scale(1.14);
+  filter: drop-shadow(0 10px 18px rgba(110, 38, 245, 0.28));
+}
+
+.conversationMapMarker:focus-visible {
+  outline: 3px solid rgba(110, 38, 245, 0.4);
+  outline-offset: 3px;
 }
 
 .conversationMapMeta {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   left: 12px;
   bottom: 12px;
   display: inline-flex;

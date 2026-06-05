@@ -1,5 +1,6 @@
 "use client";
 
+import mapboxgl from "mapbox-gl";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {
   FiCheck,
@@ -80,6 +81,10 @@ const DEFAULT_SYSTEM = {
   ipGeolocationApiKeyPreview: "",
   ipGeolocationApiKey: "",
   clearIpGeolocationApiKey: false,
+  mapboxConfigured: false,
+  mapboxToken: "",
+  mapboxTokenPreview: "",
+  clearMapboxToken: false,
   mail: {
     provider: "apple",
     providerLabel: "Apple iCloud Mail",
@@ -183,9 +188,6 @@ const CONVERSATION_STATUS_LABELS = Object.fromEntries(
 const CONVERSATION_ACTION_TYPE_LABELS = Object.fromEntries(
   CONVERSATION_ACTION_TYPES.map((type) => [type.value, type.label])
 );
-
-const MAP_TILE_INDICES = [0, 1, 2, 3];
-const MAP_TILE_ZOOM = 2;
 
 function formatDateTime(value) {
   if (!value) return "Not available";
@@ -335,6 +337,12 @@ function buildSystemPayload(system = {}) {
     payload.clearIpGeolocationApiKey = true;
   }
 
+  if (system.mapboxToken?.trim()) {
+    payload.mapboxToken = system.mapboxToken;
+  } else if (system.clearMapboxToken) {
+    payload.clearMapboxToken = true;
+  }
+
   payload.mail = normalizeMailDraft(system.mail);
 
   return payload;
@@ -382,20 +390,9 @@ function getCoordinatePair(tracking = {}) {
   return {latitude, longitude};
 }
 
-function projectMapPoint({latitude, longitude}) {
-  const constrainedLatitude = Math.max(Math.min(latitude, 85.05112878), -85.05112878);
-  const latitudeRadians = (constrainedLatitude * Math.PI) / 180;
-  const x = ((longitude + 180) / 360) * 100;
-  const y =
-    (0.5 -
-      Math.log((1 + Math.sin(latitudeRadians)) / (1 - Math.sin(latitudeRadians))) /
-        (4 * Math.PI)) *
-    100;
-
-  return {
-    left: `${Math.max(0, Math.min(100, x))}%`,
-    top: `${Math.max(0, Math.min(100, y))}%`,
-  };
+function getConversationMapCoordinates(conversation) {
+  const coordinates = getCoordinatePair(conversation?.tracking || {});
+  return coordinates ? [coordinates.longitude, coordinates.latitude] : null;
 }
 
 function conversationTitle(conversation = {}) {
@@ -450,17 +447,160 @@ function conversationMessageCountLabel(conversation = {}) {
   return `${count} message${count === 1 ? "" : "s"}`;
 }
 
-function ConversationMap({activeConversationId, conversations, onSelectConversation}) {
+function ConversationMap({
+  activeConversationId,
+  conversations,
+  mapboxToken,
+  onSelectConversation,
+}) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const token = String(mapboxToken || "").trim();
   const mappedConversations = useMemo(
     () =>
       conversations
         .map((conversation) => ({
           conversation,
-          coordinates: getCoordinatePair(conversation.tracking || {}),
+          coordinates: getConversationMapCoordinates(conversation),
         }))
         .filter((item) => item.coordinates),
     [conversations]
   );
+  const coordinatesKey = mappedConversations
+    .map((item) => `${item.conversation.id}:${item.coordinates.join(",")}`)
+    .join("|");
+
+  useEffect(() => {
+    if (!token || !containerRef.current || mapRef.current || mappedConversations.length === 0) {
+      return undefined;
+    }
+
+    mapboxgl.accessToken = token;
+
+    const map = new mapboxgl.Map({
+      attributionControl: false,
+      center: mappedConversations[0].coordinates,
+      container: containerRef.current,
+      pitch: 0,
+      style: "mapbox://styles/mapbox/light-v11",
+      zoom: mappedConversations.length === 1 ? 6 : 2,
+    });
+
+    map.addControl(
+      new mapboxgl.AttributionControl({compact: true}),
+      "bottom-right"
+    );
+    map.addControl(
+      new mapboxgl.NavigationControl({showCompass: false}),
+      "top-right"
+    );
+
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+    mapRef.current = map;
+
+    map.on("load", () => {
+      map.resize();
+    });
+    map.on("error", () => {
+      console.warn("Unable to render conversation map.");
+    });
+
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [mappedConversations, token]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = mappedConversations.map(({conversation, coordinates}) => {
+      const isActive = conversation.id === activeConversationId;
+      const marker = new mapboxgl.Marker({
+        anchor: "bottom",
+        color: isActive ? "#6e26f5" : "#253541",
+        scale: isActive ? 0.9 : 0.78,
+      })
+        .setLngLat(coordinates)
+        .addTo(map);
+      const markerElement = marker.getElement();
+      const selectConversation = () => onSelectConversation(conversation.id);
+
+      markerElement.classList.add(styles.conversationMapMarker);
+      if (isActive) {
+        markerElement.classList.add(styles.conversationMapMarkerActive);
+      }
+      markerElement.title = conversationTitle(conversation);
+      markerElement.tabIndex = 0;
+      markerElement.setAttribute("role", "button");
+      markerElement.setAttribute("aria-current", isActive ? "true" : "false");
+      markerElement.setAttribute(
+        "aria-label",
+        `Open ${conversationTitle(conversation)}`
+      );
+      markerElement.addEventListener("click", selectConversation);
+      markerElement.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+
+        event.preventDefault();
+        selectConversation();
+      });
+
+      return marker;
+    });
+
+    if (mappedConversations.length === 1) {
+      map.easeTo({
+        center: mappedConversations[0].coordinates,
+        duration: 0,
+        zoom: 6,
+      });
+    } else if (mappedConversations.length > 1) {
+      const bounds = mappedConversations.reduce(
+        (nextBounds, item) => nextBounds.extend(item.coordinates),
+        new mapboxgl.LngLatBounds(
+          mappedConversations[0].coordinates,
+          mappedConversations[0].coordinates
+        )
+      );
+
+      map.fitBounds(bounds, {duration: 0, maxZoom: 8, padding: 54});
+    }
+
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+    };
+  }, [activeConversationId, coordinatesKey, mappedConversations, onSelectConversation]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const activeItem = mappedConversations.find(
+      (item) => item.conversation.id === activeConversationId
+    );
+
+    if (!map || !activeItem) return;
+
+    map.easeTo({
+      center: activeItem.coordinates,
+      duration: 350,
+      zoom: Math.max(map.getZoom(), 5),
+    });
+  }, [activeConversationId, mappedConversations]);
+
+  if (!token) {
+    return (
+      <div className={styles.conversationMapPlaceholder}>
+        Map unavailable. Configure the Mapbox public token in Settings.
+      </div>
+    );
+  }
 
   if (mappedConversations.length === 0) {
     return (
@@ -472,36 +612,7 @@ function ConversationMap({activeConversationId, conversations, onSelectConversat
 
   return (
     <div className={styles.conversationMap} aria-label="Conversation locations">
-      <div className={styles.conversationMapTiles} aria-hidden="true">
-        {MAP_TILE_INDICES.map((y) =>
-          MAP_TILE_INDICES.map((x) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={`${x}-${y}`}
-              alt=""
-              src={`https://tile.openstreetmap.org/${MAP_TILE_ZOOM}/${x}/${y}.png`}
-              referrerPolicy="no-referrer"
-            />
-          ))
-        )}
-      </div>
-
-      {mappedConversations.map(({conversation, coordinates}) => (
-        <button
-          key={conversation.id}
-          type="button"
-          className={`${styles.conversationMapMarker} ${
-            activeConversationId === conversation.id
-              ? styles.conversationMapMarkerActive
-              : ""
-          }`}
-          style={projectMapPoint(coordinates)}
-          aria-label={`Open ${conversationTitle(conversation)}`}
-          title={conversationTitle(conversation)}
-          onClick={() => onSelectConversation(conversation.id)}
-        />
-      ))}
-
+      <div className={styles.conversationMapCanvas} ref={containerRef} />
       <div className={styles.conversationMapMeta}>
         <strong>{mappedConversations.length}</strong>
         <span>
@@ -1304,6 +1415,7 @@ function SettingsSection({
   saving,
 }) {
   const [isIpGeolocationHelpOpen, setIsIpGeolocationHelpOpen] = useState(false);
+  const [isMapboxHelpOpen, setIsMapboxHelpOpen] = useState(false);
   const isIpGeolocationConnected =
     Boolean(system.ipGeolocationConfigured) &&
     !system.clearIpGeolocationApiKey;
@@ -1311,9 +1423,22 @@ function SettingsSection({
     !system.ipGeolocationConfigured ||
     Boolean(system.clearIpGeolocationApiKey) ||
     Boolean(system.ipGeolocationApiKey?.trim());
+  const canSaveIpGeolocation =
+    Boolean(system.ipGeolocationApiKey?.trim()) ||
+    Boolean(system.clearIpGeolocationApiKey);
   const ipGeolocationSummary = isIpGeolocationConnected
     ? `API key ${system.ipGeolocationApiKeyPreview || "configured"}`
     : "Add an API key to enrich conversations with location data.";
+  const isMapboxConnected =
+    Boolean(system.mapboxConfigured || system.mapboxToken?.trim()) &&
+    !system.clearMapboxToken;
+  const showMapboxTokenField =
+    !system.mapboxConfigured || Boolean(system.clearMapboxToken);
+  const canSaveMapbox =
+    Boolean(system.mapboxToken?.trim()) || Boolean(system.clearMapboxToken);
+  const mapboxSummary = isMapboxConnected
+    ? `Public token ${system.mapboxTokenPreview || "configured"}`
+    : "Add a public token to render the conversation location map.";
   const mail = normalizeMailDraft(system.mail);
   const mailRecipients = Array.isArray(mail.recipients) ? mail.recipients : [];
   const mailMissing = Array.isArray(mail.missing) ? mail.missing : [];
@@ -1476,10 +1601,15 @@ function SettingsSection({
               type="button"
               className={styles.secondaryButton}
               onClick={onSave}
-              disabled={saving || !system.ipGeolocationApiKey?.trim()}
+              disabled={saving || !canSaveIpGeolocation}
             >
               <FiCheck aria-hidden="true" />
-              {saving ? "Connecting..." : "Connect"}
+              {saving
+                ? "Saving..."
+                : system.clearIpGeolocationApiKey &&
+                  !system.ipGeolocationApiKey?.trim()
+                ? "Save disconnect"
+                : "Connect"}
             </button>
           ) : (
             <button
@@ -1490,6 +1620,120 @@ function SettingsSection({
                   ...current,
                   clearIpGeolocationApiKey: true,
                   ipGeolocationApiKey: "",
+                }))
+              }
+            >
+              <FiTrash2 aria-hidden="true" />
+              Disconnect
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.integrationPanel}>
+        <div className={styles.integrationHeader}>
+          <div className={styles.titleBlock}>
+            <h2>Mapbox</h2>
+            <p>{mapboxSummary}</p>
+          </div>
+          <div className={styles.sectionActions}>
+            <div className={styles.helpAnchor}>
+              <button
+                type="button"
+                className={styles.inlineHelpButton}
+                aria-label="Show Mapbox setup help"
+                aria-expanded={isMapboxHelpOpen}
+                onClick={() =>
+                  setIsMapboxHelpOpen((currentValue) => !currentValue)
+                }
+              >
+                <FiHelpCircle aria-hidden="true" />
+              </button>
+              {isMapboxHelpOpen ? (
+                <div className={styles.helpPopover} role="dialog">
+                  <div className={styles.helpPopoverHeader}>
+                    <strong>Mapbox setup</strong>
+                    <button
+                      type="button"
+                      className={styles.helpCloseButton}
+                      aria-label="Close Mapbox setup help"
+                      onClick={() => setIsMapboxHelpOpen(false)}
+                    >
+                      <FiX aria-hidden="true" />
+                    </button>
+                  </div>
+                  <p>
+                    Create a public Mapbox access token and paste it here. The
+                    admin dashboard uses it in the browser to render the
+                    conversation location map.
+                  </p>
+                  <a
+                    href="https://account.mapbox.com/access-tokens/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open Mapbox access tokens{" "}
+                    <FiExternalLink aria-hidden="true" />
+                  </a>
+                </div>
+              ) : null}
+            </div>
+            <span
+              className={`${styles.connectionChip} ${
+                isMapboxConnected
+                  ? styles.connectionChipConnected
+                  : styles.connectionChipDisconnected
+              }`}
+            >
+              {isMapboxConnected ? "Connected" : "Not connected"}
+            </span>
+          </div>
+        </div>
+
+        {showMapboxTokenField ? (
+          <div className={styles.ipGeoControls}>
+            <label className={`${styles.field} ${styles.ipGeoKeyField}`}>
+              Public token
+              <input
+                value={system.mapboxToken || ""}
+                onChange={(event) =>
+                  setSystem((current) => ({
+                    ...current,
+                    mapboxToken: event.target.value,
+                    clearMapboxToken: false,
+                  }))
+                }
+                autoComplete="off"
+                placeholder="Optional Mapbox public token"
+              />
+            </label>
+          </div>
+        ) : null}
+
+        <div className={styles.integrationFooterActions}>
+          {showMapboxTokenField ? (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onSave}
+              disabled={saving || !canSaveMapbox}
+            >
+              <FiCheck aria-hidden="true" />
+              {saving
+                ? "Saving..."
+                : system.clearMapboxToken && !system.mapboxToken?.trim()
+                ? "Save disconnect"
+                : "Connect"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.dangerButton}
+              onClick={() =>
+                setSystem((current) => ({
+                  ...current,
+                  clearMapboxToken: true,
+                  mapboxToken: "",
                 }))
               }
             >
@@ -1871,6 +2115,7 @@ function ConversationsSection({
   onRefresh,
   onSave,
   onDelete,
+  mapboxToken,
   busy,
 }) {
   const [activeId, setActiveId] = useState("");
@@ -2057,6 +2302,7 @@ function ConversationsSection({
           <ConversationMap
             activeConversationId={activeConversation?.id || ""}
             conversations={conversations}
+            mapboxToken={mapboxToken}
             onSelectConversation={openConversationDetails}
           />
 
@@ -2724,6 +2970,7 @@ export default function AdminDashboard({user}) {
             onRefresh={() => runTask(loadConversations, "")}
             onSave={saveConversation}
             onDelete={deleteConversation}
+            mapboxToken={system.mapboxToken || ""}
             busy={busy}
           />
         ) : null}

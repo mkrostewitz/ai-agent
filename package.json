@@ -23,6 +23,7 @@
     "i18next-browser-languagedetector": "^8.2.0",
     "langchain": "^0.2.16",
     "langchainhub": "^0.0.11",
+    "mapbox-gl": "^3.16.0",
     "mongodb": "^6.21.0",
     "next": "14.2.5",
     "nodemailer": "^8.0.10",

@@ -31,9 +31,11 @@ OLLAMA_MODEL=phi3:mini
 If the MongoDB password contains reserved URL characters such as `,`, `:`, `@`,
 `/`, `?`, `#`, or `%`, URL-encode the password inside `MONGODB_URI`.
 
-Admin users, password hashes, the session-signing secret, the optional IPGeolocation.io API key, and mail delivery settings are configured through `/admin` and stored in MongoDB.
+Admin users, password hashes, the session-signing secret, the optional IPGeolocation.io API key, the Mapbox public token, and mail delivery settings are configured through `/admin` and stored in MongoDB.
 
 For latitude/longitude enrichment, create an IPGeolocation.io API key from the dashboard and save it in first-run setup or Settings. Conversation tracking uses the server-side IP Location API and stores country, city, ASN, timezone, currency, and coordinate fields when available: https://ipgeolocation.io/documentation/ip-location-api.html
+
+For the admin conversation map, create a public Mapbox access token and save it in first-run setup or Settings. The dashboard loads that stored token at runtime instead of using `NEXT_PUBLIC_MAPBOX_TOKEN`.
 
 Mail notification configuration:
 
@@ -103,7 +105,7 @@ It lets an admin manage:
 
 - Agent profile: name, bundled or uploaded image/MP4 avatar, colors, localized greetings, and starting messages.
 - Agent settings: instructions, model, temperature, top-k/top-p, max tokens, retrieval namespace, and retrieval count.
-- System integrations: IPGeolocation.io API key setup/replacement/clearing and mail delivery settings/status.
+- System integrations: IPGeolocation.io API key setup/replacement/clearing, Mapbox public token setup/replacement/clearing, and mail delivery settings/status.
 - Knowledge: upload PDFs, RAG website URLs on demand, list indexed sources, and delete indexed sources.
 - Conversations: review user conversations, status/notes/actions, IP/location metadata, and a location map when coordinates are available.
 

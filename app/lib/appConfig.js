@@ -182,6 +182,10 @@ export async function updateIntegrationsConfig(input = {}) {
     set.ipGeolocationApiKey = cleanString(input.ipGeolocationApiKey);
   }
 
+  if (hasOwn(input, "mapboxToken")) {
+    set.mapboxToken = cleanString(input.mapboxToken);
+  }
+
   if (input.mail && typeof input.mail === "object" && !Array.isArray(input.mail)) {
     const existing = await getIntegrationsConfig();
     const currentMail = existing?.mail || {};
