@@ -1,0 +1,22 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: ai-agent-caddy
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_caddy_data"
+  caddy_config:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_caddy_config"

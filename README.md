@@ -210,6 +210,13 @@ Use the regular compose file plus the GPU override:
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
+If `APP_DOMAIN` points at the Droplet and `.env.docker` has
+`APP_BASE_URL="https://..."`, include the Caddy HTTPS override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml up -d --build
+```
+
 The GPU override keeps up to two requests per loaded model active, keeps two
 models loaded when VRAM allows it, enables Flash Attention, and pulls
 `phi3:mini`, `nomic-embed-text`, and `llama3.1:8b` for app-specific model
@@ -232,3 +239,5 @@ cd /opt/ai-agent
 git pull
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
+
+For HTTPS deployments, include `docker-compose.https.yml` in the same command.

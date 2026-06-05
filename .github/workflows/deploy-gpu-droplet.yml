@@ -73,7 +73,7 @@ jobs:
           git checkout "$DEPLOY_BRANCH"
           git pull --ff-only origin "$DEPLOY_BRANCH"
 
-          docker compose -f docker-compose.yml -f docker-compose.gpu.yml config --services
-          docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
-          docker compose -f docker-compose.yml -f docker-compose.gpu.yml ps
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml config --services
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml up -d --build
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml ps
           REMOTE

@@ -97,12 +97,19 @@ MongoDB.
 ```env
 APP_ENCRYPTION_KEY="CHANGE_ME_LONG_RANDOM_SECRET"
 APP_BASE_URL="https://your-agent-domain.com"
+APP_DOMAIN="your-agent-domain.com"
 ```
 
 Start the GPU stack:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
+If a domain points to the Droplet, start the HTTPS stack as well:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml up -d --build
 ```
 
 The first startup downloads models listed in `docker-compose.gpu.yml`, currently:
@@ -146,6 +153,7 @@ The `PROCESSOR` column should show GPU usage, not `100% CPU`.
 ## Production Notes
 
 - Use a reverse proxy such as Caddy, nginx, or a DigitalOcean Load Balancer for HTTPS.
+- This repo includes a Caddy override in `docker-compose.https.yml`; set `APP_DOMAIN` in `.env.docker` before using it.
 - Do not expose MongoDB or Ollama publicly.
 - Use DigitalOcean Spaces for uploaded avatars and files in production.
 - Use separate Compose project names and separate Mongo databases if you later host multiple apps on the same GPU Droplet.
@@ -159,6 +167,12 @@ For a simple manual redeploy:
 cd /opt/ai-agent
 git pull
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
+For HTTPS deployments:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml up -d --build
 ```
 
 For continuous deployment, use GitHub Actions to SSH into the Droplet and run
