@@ -618,6 +618,32 @@
     });
   }
 
+  function focusWithoutPageScroll(element) {
+    if (!element || typeof element.focus !== "function") return;
+    requestAnimationFrame(function () {
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      try {
+        element.focus({preventScroll: true});
+      } catch (_) {
+        element.focus();
+      }
+      if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+        window.scrollTo(scrollX, scrollY);
+      }
+    });
+  }
+
+  function focusCurrentWidgetTarget() {
+    if (needsUserDetails()) {
+      focusWithoutPageScroll(firstField.field);
+      return;
+    }
+    if (!input.disabled) {
+      focusWithoutPageScroll(input);
+    }
+  }
+
   function hasUserMessage() {
     return state.conversation.some(function (message) {
       return message.role === "user";
@@ -649,7 +675,7 @@
     if (userPayload) {
       startIntroConversation(userPayload);
     } else if (needsUserDetails()) {
-      toggleUserOverlay();
+      toggleUserOverlay(null, true);
     }
   }
 
@@ -669,7 +695,7 @@
     renderSuggestions();
   }
 
-  function toggleUserOverlay(message) {
+  function toggleUserOverlay(message, shouldFocus = false) {
     const shouldShow = needsUserDetails();
     userOverlay.classList.toggle("hidden", !shouldShow);
     if (shouldShow) {
@@ -678,7 +704,9 @@
       emailField.field.value = state.user.email || "";
       phoneField.field.value = state.user.phone || "";
       userError.textContent = message || "";
-      firstField.field.focus();
+      if (shouldFocus) {
+        focusWithoutPageScroll(firstField.field);
+      }
     } else {
       userError.textContent = "";
     }
@@ -1027,6 +1055,7 @@
     }
     if (open) {
       scrollToBottom(true);
+      focusCurrentWidgetTarget();
     }
   }
 
@@ -1119,7 +1148,10 @@
   async function sendMessage(text) {
     if (!text) return;
     if (needsUserDetails()) {
-      toggleUserOverlay("Please add your name and email to start chatting.");
+      toggleUserOverlay(
+        "Please add your name and email to start chatting.",
+        true
+      );
       return;
     }
     if (!state.hasStarted) state.hasStarted = true;
@@ -1300,7 +1332,7 @@
     saveConversationCookie();
     const userPayload = sanitizeUserPayload(state.user);
     startIntroConversation(userPayload);
-    input.focus();
+    focusWithoutPageScroll(input);
   });
 
   inputRow.addEventListener("submit", function (e) {
