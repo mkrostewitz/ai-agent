@@ -1,12 +1,15 @@
 "use client";
 
 import {useRouter, useSearchParams} from "next/navigation";
-import {useState} from "react";
+import {useCallback, useEffect, useMemo, useState} from "react";
 import {
+  FiAlertTriangle,
   FiCheckCircle,
+  FiDatabase,
   FiExternalLink,
   FiHelpCircle,
   FiKey,
+  FiRefreshCw,
   FiUserPlus,
   FiX,
 } from "react-icons/fi";
@@ -14,9 +17,24 @@ import {
 import {safeAdminNextPath} from "@/app/lib/adminRoutes";
 import styles from "../admin.module.css";
 
+const DATABASE_STATUS_POLL_MS = 5000;
+
+const INITIAL_DATABASE_STATUS = {
+  isChecking: true,
+  label: "Checking database",
+  message: "Checking MongoDB connection...",
+  ok: false,
+  state: "checking",
+};
+
 export default function SetupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const nextParam = searchParams.get("next");
+  const nextPath = useMemo(
+    () => safeAdminNextPath(nextParam),
+    [nextParam]
+  );
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -26,12 +44,81 @@ export default function SetupForm() {
     ipInfoToken: "",
   });
   const [error, setError] = useState("");
+  const [databaseStatus, setDatabaseStatus] = useState(INITIAL_DATABASE_STATUS);
   const [isIpInfoHelpOpen, setIsIpInfoHelpOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function updateField(key, value) {
     setForm((current) => ({...current, [key]: value}));
   }
+
+  const refreshDatabaseStatus = useCallback(async () => {
+    setDatabaseStatus((current) => ({
+      ...current,
+      isChecking: true,
+      label: current.ok ? "Rechecking database" : "Checking database",
+      message: current.ok
+        ? "Rechecking MongoDB connection..."
+        : current.message || "Checking MongoDB connection...",
+      state: current.ok ? "connected" : "checking",
+    }));
+
+    try {
+      const response = await fetch("/api/admin/setup/status", {
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => ({}));
+      const database = data?.database || {};
+      const nextStatus = database.ok
+        ? {
+            isChecking: false,
+            label: "Database connected",
+            message: database.message || "MongoDB connection is ready.",
+            ok: true,
+            state: "connected",
+          }
+        : {
+            isChecking: false,
+            label: "Database unavailable",
+            message:
+              database.message ||
+              "Unable to verify the MongoDB connection. Check the server configuration.",
+            ok: false,
+            state: "error",
+          };
+
+      setDatabaseStatus(nextStatus);
+
+      if (data?.setup?.complete) {
+        router.replace(nextPath);
+        router.refresh();
+      }
+
+      return nextStatus;
+    } catch {
+      const nextStatus = {
+        isChecking: false,
+        label: "Status check failed",
+        message:
+          "Unable to check MongoDB status from the browser. Refresh the page or check the web container logs.",
+        ok: false,
+        state: "error",
+      };
+
+      setDatabaseStatus(nextStatus);
+      return nextStatus;
+    }
+  }, [nextPath, router]);
+
+  useEffect(() => {
+    refreshDatabaseStatus();
+    const intervalId = window.setInterval(
+      refreshDatabaseStatus,
+      DATABASE_STATUS_POLL_MS
+    );
+
+    return () => window.clearInterval(intervalId);
+  }, [refreshDatabaseStatus]);
 
   async function submitSetup(event) {
     event.preventDefault();
@@ -40,6 +127,14 @@ export default function SetupForm() {
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match.");
       return;
+    }
+
+    if (!databaseStatus.ok) {
+      const latestStatus = await refreshDatabaseStatus();
+      if (!latestStatus.ok) {
+        setError("Fix the MongoDB connection before completing setup.");
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -67,7 +162,7 @@ export default function SetupForm() {
         throw new Error(data.error || "Unable to complete setup.");
       }
 
-      router.replace(safeAdminNextPath(searchParams.get("next")));
+      router.replace(nextPath);
       router.refresh();
     } catch (setupError) {
       setError(setupError.message);
@@ -91,6 +186,41 @@ export default function SetupForm() {
           This creates the first admin user, stores the password as a hash, and
           generates the server-side session secret in MongoDB.
         </span>
+      </div>
+
+      <div
+        className={`${styles.setupStatus} ${
+          databaseStatus.state === "connected"
+            ? styles.setupStatusConnected
+            : databaseStatus.state === "checking"
+            ? styles.setupStatusChecking
+            : styles.setupStatusError
+        }`}
+        role={databaseStatus.state === "error" ? "alert" : "status"}
+        aria-live="polite"
+      >
+        <span className={styles.setupStatusIcon}>
+          {databaseStatus.state === "connected" ? (
+            <FiCheckCircle aria-hidden="true" />
+          ) : databaseStatus.state === "checking" ? (
+            <FiDatabase aria-hidden="true" />
+          ) : (
+            <FiAlertTriangle aria-hidden="true" />
+          )}
+        </span>
+        <span className={styles.setupStatusText}>
+          <strong>{databaseStatus.label}</strong>
+          <span>{databaseStatus.message}</span>
+        </span>
+        <button
+          type="button"
+          className={styles.setupStatusButton}
+          disabled={databaseStatus.isChecking}
+          onClick={refreshDatabaseStatus}
+        >
+          <FiRefreshCw aria-hidden="true" />
+          Check
+        </button>
       </div>
 
       <form className={styles.form} onSubmit={submitSetup}>
@@ -211,9 +341,21 @@ export default function SetupForm() {
 
         {error ? <div className={styles.errorBox}>{error}</div> : null}
 
-        <button className={styles.primaryButton} disabled={isSubmitting}>
+        <button
+          className={styles.primaryButton}
+          disabled={isSubmitting || !databaseStatus.ok}
+          title={
+            databaseStatus.ok
+              ? undefined
+              : "MongoDB must be connected before setup can be completed."
+          }
+        >
           <FiCheckCircle aria-hidden="true" />
-          {isSubmitting ? "Creating admin..." : "Complete setup"}
+          {isSubmitting
+            ? "Creating admin..."
+            : databaseStatus.ok
+            ? "Complete setup"
+            : "Waiting for database"}
         </button>
       </form>
     </section>
