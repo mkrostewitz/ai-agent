@@ -1123,8 +1123,10 @@
       return;
     }
     if (!state.hasStarted) state.hasStarted = true;
-    // user message first
-    addMessage("user", text);
+    // Show the pending assistant state while the request is still opening.
+    state.conversation.push({role: "user", content: text});
+    state.typing = true;
+    renderMessages();
     setLoading(true);
     try {
       const res = await fetch(host + "/api/agents/chat/stream", {
@@ -1149,9 +1151,8 @@
           data?.data?.message ||
           data?.message ||
           t("fallback");
-        addMessage("assistant", reply);
         state.typing = false;
-        renderMessages();
+        addMessage("assistant", reply);
         persistConversation([
           {role: "user", content: text},
           {role: "assistant", content: reply},
@@ -1182,9 +1183,11 @@
         renderMessages();
       }
 
-      // show typing until first token arrives
-      state.typing = true;
-      renderMessages();
+      // Keep showing typing until the first token arrives.
+      if (!state.typing) {
+        state.typing = true;
+        renderMessages();
+      }
 
       while (true) {
         const {done, value} = await reader.read();
@@ -1235,9 +1238,8 @@
         },
       ]);
     } catch (e) {
-      addMessage("assistant", t("error"));
       state.typing = false;
-      renderMessages();
+      addMessage("assistant", t("error"));
     } finally {
       setLoading(false);
     }
