@@ -7,17 +7,19 @@ import {getMailDeliveryStatus} from "@/app/lib/mail";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function tokenPreview(token) {
-  const text = String(token || "").trim();
+function secretPreview(value) {
+  const text = String(value || "").trim();
   if (!text) return "";
   return text.length <= 4 ? "set" : `...${text.slice(-4)}`;
 }
 
-async function integrationsResponse(token) {
+async function integrationsResponse(config = {}) {
+  const apiKey = String(config?.ipGeolocationApiKey || "").trim();
+
   return {
     integrations: {
-      ipInfoConfigured: Boolean(token),
-      ipInfoTokenPreview: tokenPreview(token),
+      ipGeolocationConfigured: Boolean(apiKey),
+      ipGeolocationApiKeyPreview: secretPreview(apiKey),
       mail: await getMailDeliveryStatus(),
     },
   };
@@ -29,9 +31,8 @@ export async function GET(request) {
 
   try {
     const config = await getIntegrationsConfig();
-    const token = config?.ipInfoToken || "";
 
-    return NextResponse.json(await integrationsResponse(token));
+    return NextResponse.json(await integrationsResponse(config));
   } catch (error) {
     console.error("Admin system GET error:", error);
     return NextResponse.json(
@@ -47,16 +48,16 @@ export async function PUT(request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const nextToken = body.clearIpInfoToken
+    const nextApiKey = body.clearIpGeolocationApiKey
       ? ""
-      : typeof body.ipInfoToken === "string"
-      ? body.ipInfoToken
+      : typeof body.ipGeolocationApiKey === "string"
+      ? body.ipGeolocationApiKey
       : undefined;
 
     const updatePayload = {};
 
-    if (typeof nextToken === "string") {
-      updatePayload.ipInfoToken = nextToken;
+    if (typeof nextApiKey === "string") {
+      updatePayload.ipGeolocationApiKey = nextApiKey;
     }
 
     if (body.mail && typeof body.mail === "object" && !Array.isArray(body.mail)) {
@@ -66,9 +67,8 @@ export async function PUT(request) {
     const config = Object.keys(updatePayload).length
       ? await updateIntegrationsConfig(updatePayload)
       : await getIntegrationsConfig();
-    const token = config?.ipInfoToken || "";
 
-    return NextResponse.json(await integrationsResponse(token));
+    return NextResponse.json(await integrationsResponse(config));
   } catch (error) {
     console.error("Admin system PUT error:", error);
     return NextResponse.json(

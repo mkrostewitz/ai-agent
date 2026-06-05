@@ -89,13 +89,16 @@ OLLAMA_BASE_URL="http://ollama:11434"
 OLLAMA_HOST="http://ollama:11434"
 ```
 
+For automatic conversation map coordinates, create an IPGeolocation.io key in
+the dashboard and save it during first-run setup or in the Settings tab.
+
 Keep `MONGO_APP_PASSWORD` as the raw MongoDB password. In `MONGODB_URI`, the
 password must be URL-encoded if it contains reserved characters such as `,`,
 `:`, `@`, `/`, `?`, `#`, or `%`. For example, a raw password containing `,` must
 use `%2C` at that character position inside `MONGODB_URI`.
 
-If the first-run admin form shows this error, the IPInfo token is not the
-problem; `MONGODB_URI` is malformed:
+If the first-run admin form shows this error, the IPGeolocation.io key is not
+the problem; `MONGODB_URI` is malformed:
 
 ```text
 Unable to parse aiagent_app:X with URL

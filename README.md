@@ -31,7 +31,9 @@ OLLAMA_MODEL=phi3:mini
 If the MongoDB password contains reserved URL characters such as `,`, `:`, `@`,
 `/`, `?`, `#`, or `%`, URL-encode the password inside `MONGODB_URI`.
 
-Admin users, password hashes, the session-signing secret, the optional IPInfo token, and mail delivery settings are configured through `/admin` and stored in MongoDB.
+Admin users, password hashes, the session-signing secret, the optional IPGeolocation.io API key, and mail delivery settings are configured through `/admin` and stored in MongoDB.
+
+For latitude/longitude enrichment, create an IPGeolocation.io API key from the dashboard and save it in first-run setup or Settings. Conversation tracking uses the server-side IP Location API and stores country, city, ASN, timezone, currency, and coordinate fields when available: https://ipgeolocation.io/documentation/ip-location-api.html
 
 Mail notification configuration:
 
@@ -95,17 +97,17 @@ Use one admin entry point:
 
 `/admin` decides what to show based on MongoDB state. If setup is incomplete, it shows first-run setup. If setup is complete and no admin session exists, it shows sign-in. If an admin session exists, it shows the dashboard.
 
-The first-run setup creates the first admin user, stores the password as a hash in MongoDB, generates the server-side session secret, and saves the optional IPInfo token.
+The first-run setup creates the first admin user, stores the password as a hash in MongoDB, generates the server-side session secret, and saves the optional IPGeolocation.io API key.
 
 It lets an admin manage:
 
 - Agent profile: name, bundled or uploaded image/MP4 avatar, colors, localized greetings, and starting messages.
 - Agent settings: instructions, model, temperature, top-k/top-p, max tokens, retrieval namespace, and retrieval count.
-- System integrations: IPInfo token setup/replacement/clearing and mail delivery settings/status.
+- System integrations: IPGeolocation.io API key setup/replacement/clearing and mail delivery settings/status.
 - Knowledge: upload PDFs, RAG website URLs on demand, list indexed sources, and delete indexed sources.
 - Conversations: review user conversations, status/notes/actions, IP/location metadata, and a location map when coordinates are available.
 
-The IPInfo token enables city/country/coordinate enrichment for widget conversations. Without a token, the app still stores request headers such as user agent/referrer and any proxy-provided country code.
+The IPGeolocation.io key enables city/country/coordinate enrichment for widget conversations. Without it, the app still stores request headers such as user agent/referrer and any proxy-provided country code.
 
 When mail is configured, `/api/agents/conversations/create` sends a best-effort
 notification email for each new stored conversation. Delivery errors are logged

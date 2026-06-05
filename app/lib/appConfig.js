@@ -176,9 +176,10 @@ export async function updateIntegrationsConfig(input = {}) {
   const db = await getDb();
   const now = new Date();
   const set = {updatedAt: now};
+  const unset = {ipInfoToken: ""};
 
-  if (hasOwn(input, "ipInfoToken")) {
-    set.ipInfoToken = cleanString(input.ipInfoToken);
+  if (hasOwn(input, "ipGeolocationApiKey")) {
+    set.ipGeolocationApiKey = cleanString(input.ipGeolocationApiKey);
   }
 
   if (input.mail && typeof input.mail === "object" && !Array.isArray(input.mail)) {
@@ -264,6 +265,7 @@ export async function updateIntegrationsConfig(input = {}) {
         createdAt: now,
       },
       $set: set,
+      $unset: unset,
     },
     {upsert: true}
   );
@@ -271,9 +273,9 @@ export async function updateIntegrationsConfig(input = {}) {
   return getIntegrationsConfig();
 }
 
-export async function getIpInfoToken() {
+export async function getIpGeolocationApiKey() {
   const config = await getIntegrationsConfig();
-  return cleanString(config?.ipInfoToken);
+  return cleanString(config?.ipGeolocationApiKey);
 }
 
 export async function getStoredMailConfig() {

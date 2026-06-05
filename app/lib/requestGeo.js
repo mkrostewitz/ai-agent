@@ -1,10 +1,9 @@
 import {isIP} from "node:net";
 
-import {getIpInfoToken as getStoredIpInfoToken} from "./appConfig";
+import {getIpGeolocationApiKey as getStoredIpGeolocationApiKey} from "./appConfig";
 
-const IPINFO_LITE_ENDPOINT = "https://api.ipinfo.io/lite";
-const IPINFO_LOOKUP_ENDPOINT = "https://api.ipinfo.io/lookup";
-const IPINFO_TIMEOUT_MS = 2000;
+const IPGEOLOCATION_ENDPOINT = "https://api.ipgeolocation.io/v3/ipgeo";
+const IPGEOLOCATION_TIMEOUT_MS = 2500;
 
 const IP_HEADER_NAMES = [
   "x-site-client-ip",
@@ -34,7 +33,7 @@ const COUNTRY_HEADER_NAMES = [
 const UNKNOWN_COUNTRY_CODES = new Set(["T1", "XX", "ZZ"]);
 
 function cleanString(value) {
-  return String(value || "").trim();
+  return value === null || value === undefined ? "" : String(value).trim();
 }
 
 function firstString(...values) {
@@ -51,8 +50,8 @@ function normalizeCountryCode(value) {
   return /^[A-Z]{2}$/.test(code) && !UNKNOWN_COUNTRY_CODES.has(code) ? code : "";
 }
 
-export async function getIpInfoToken() {
-  return getStoredIpInfoToken();
+export async function getIpGeolocationApiKey() {
+  return getStoredIpGeolocationApiKey().catch(() => "");
 }
 
 export function normalizeIp(value) {
@@ -128,34 +127,142 @@ export function getCountryCodeFromHeaders(request) {
   return "";
 }
 
-function parseIpInfoCoordinates(ipInfo = {}) {
-  const data = ipInfo || {};
-  const geo = data.geo || {};
-  const latitude = firstString(geo.latitude, data.latitude);
-  const longitude = firstString(geo.longitude, data.longitude);
+function parseCoordinate(value, min, max) {
+  const text = cleanString(value);
+  if (!text) return null;
 
-  if (latitude || longitude) {
-    return {latitude, longitude};
-  }
+  const normalized = text.includes(".") ? text : text.replace(",", ".");
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return null;
 
-  const loc = cleanString(geo.loc || data.loc);
-  const [locLatitude, locLongitude] = loc.split(",").map((part) => part?.trim());
+  const coordinate = Number(normalized);
+  return Number.isFinite(coordinate) && coordinate >= min && coordinate <= max
+    ? coordinate
+    : null;
+}
+
+function isZeroCoordinatePair(latitude, longitude) {
+  return Math.abs(latitude) < 0.000001 && Math.abs(longitude) < 0.000001;
+}
+
+function serializeCoordinate(coordinate) {
+  return Number(coordinate.toFixed(6));
+}
+
+function parseCoordinatePair(latitudeValue, longitudeValue) {
+  const latitude = parseCoordinate(latitudeValue, -90, 90);
+  const longitude = parseCoordinate(longitudeValue, -180, 180);
+
+  if (latitude === null || longitude === null) return null;
+  if (isZeroCoordinatePair(latitude, longitude)) return null;
 
   return {
-    latitude: locLatitude || "",
-    longitude: locLongitude || "",
+    latitude: serializeCoordinate(latitude),
+    longitude: serializeCoordinate(longitude),
   };
 }
 
-async function fetchIpInfoEndpoint(endpoint, ip, token) {
-  if (!ip || !token) return null;
+function normalizeBoolean(value) {
+  return typeof value === "boolean" ? value : "";
+}
+
+function normalizeNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : "";
+}
+
+function normalizeObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function normalizeIpGeolocationGeo(ipGeo = {}) {
+  const data = ipGeo || {};
+  const location = data.location || {};
+  const timeZone = data.time_zone || {};
+  const countryMetadata = data.country_metadata || {};
+  const currency = data.currency || {};
+  const asn = data.asn || {};
+  const company = data.company || {};
+  const network = data.network || {};
+  const coordinates = parseCoordinatePair(
+    location.latitude,
+    location.longitude
+  );
+
+  return {
+    hostname: firstString(data.hostname),
+    country: firstString(location.country_name),
+    countryCode: normalizeCountryCode(location.country_code2),
+    countryCode3: firstString(location.country_code3),
+    countryOfficialName: firstString(location.country_name_official),
+    countryCapital: firstString(location.country_capital),
+    continentCode: firstString(location.continent_code),
+    continent: firstString(location.continent_name),
+    state: firstString(location.state_prov),
+    stateCode: firstString(location.state_code),
+    district: firstString(location.district),
+    city: firstString(location.city),
+    locality: firstString(location.locality),
+    accuracyRadius: normalizeNumber(location.accuracy_radius),
+    locationConfidence: firstString(location.confidence),
+    dmaCode: firstString(location.dma_code),
+    postalCode: firstString(location.zipcode),
+    latitude: coordinates?.latitude || "",
+    longitude: coordinates?.longitude || "",
+    isEu: normalizeBoolean(location.is_eu),
+    countryFlag: firstString(location.country_flag),
+    geonameId: firstString(location.geoname_id),
+    countryEmoji: firstString(location.country_emoji),
+    callingCode: firstString(countryMetadata.calling_code),
+    countryTld: firstString(countryMetadata.tld),
+    languages: Array.isArray(countryMetadata.languages)
+      ? countryMetadata.languages.filter(Boolean)
+      : [],
+    currencyCode: firstString(currency.code),
+    currencyName: firstString(currency.name),
+    currencySymbol: firstString(currency.symbol),
+    asn: firstString(asn.as_number),
+    asnOrganization: firstString(asn.organization),
+    asnCountry: firstString(asn.country),
+    asnType: firstString(asn.type),
+    asnDomain: firstString(asn.domain),
+    asnDateAllocated: firstString(asn.date_allocated),
+    asnRir: firstString(asn.rir),
+    companyName: firstString(company.name),
+    companyType: firstString(company.type),
+    companyDomain: firstString(company.domain),
+    networkRoute: firstString(network.route),
+    networkConnectionType: firstString(network.connection_type),
+    networkIsAnycast: normalizeBoolean(network.is_anycast),
+    timezone: firstString(timeZone.name),
+    timezoneOffset: normalizeNumber(timeZone.offset),
+    timezoneOffsetWithDst: normalizeNumber(timeZone.offset_with_dst),
+    timezoneCurrentTime: firstString(timeZone.current_time),
+    timezoneCurrentTimeUnix: normalizeNumber(timeZone.current_time_unix),
+    timezoneCurrentAbbreviation: firstString(timeZone.current_tz_abbreviation),
+    timezoneCurrentName: firstString(timeZone.current_tz_full_name),
+    timezoneStandardAbbreviation: firstString(timeZone.standard_tz_abbreviation),
+    timezoneStandardName: firstString(timeZone.standard_tz_full_name),
+    timezoneIsDst: normalizeBoolean(timeZone.is_dst),
+    timezoneDstSavings: normalizeNumber(timeZone.dst_savings),
+    timezoneDstExists: normalizeBoolean(timeZone.dst_exists),
+    timezoneDstAbbreviation: firstString(timeZone.dst_tz_abbreviation),
+    timezoneDstName: firstString(timeZone.dst_tz_full_name),
+    timezoneDstStart: normalizeObject(timeZone.dst_start),
+    timezoneDstEnd: normalizeObject(timeZone.dst_end),
+  };
+}
+
+async function fetchIpGeolocationGeo(ip, apiKey) {
+  const resolvedApiKey = apiKey || (await getIpGeolocationApiKey());
+  if (!ip || !resolvedApiKey) return null;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), IPINFO_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), IPGEOLOCATION_TIMEOUT_MS);
 
   try {
-    const url = new URL(`${endpoint}/${ip}`);
-    url.searchParams.set("token", token);
+    const url = new URL(IPGEOLOCATION_ENDPOINT);
+    url.searchParams.set("apiKey", resolvedApiKey);
+    url.searchParams.set("ip", ip);
 
     const response = await fetch(url, {
       cache: "no-store",
@@ -165,69 +272,22 @@ async function fetchIpInfoEndpoint(endpoint, ip, token) {
 
     if (!response.ok) return null;
 
-    return response.json().catch(() => null);
+    const data = await response.json().catch(() => null);
+    const geo = normalizeIpGeolocationGeo(data);
+
+    if (
+      geo.country ||
+      geo.countryCode ||
+      geo.state ||
+      geo.city ||
+      (geo.latitude && geo.longitude)
+    ) {
+      return {...geo, source: "ipgeolocation"};
+    }
+  } catch (error) {
+    console.warn(`[geo] IPGeolocation lookup failed for ${ip}: ${error.message}`);
   } finally {
     clearTimeout(timeout);
-  }
-}
-
-export function normalizeIpInfoGeo(ipInfo = {}) {
-  const data = ipInfo || {};
-  const geo = data.geo || {};
-  const countryCode = normalizeCountryCode(
-    geo.country_code ||
-      data.country_code ||
-      (/^[a-z]{2}$/i.test(cleanString(geo.country)) ? geo.country : "") ||
-      (/^[a-z]{2}$/i.test(cleanString(data.country)) ? data.country : "")
-  );
-  const coordinates = parseIpInfoCoordinates(data);
-
-  return {
-    country: firstString(
-      geo.country,
-      data.country_name,
-      /^[a-z]{2}$/i.test(cleanString(data.country)) ? "" : data.country,
-      countryCode
-    ),
-    countryCode,
-    state: firstString(geo.region, data.region),
-    stateCode: firstString(geo.region_code, data.region_code),
-    city: firstString(geo.city, data.city),
-    postalCode: firstString(
-      geo.postal_code,
-      geo.postalCode,
-      data.postal_code,
-      data.postalCode,
-      data.postal
-    ),
-    timezone: firstString(geo.timezone, data.timezone),
-    latitude: coordinates.latitude,
-    longitude: coordinates.longitude,
-  };
-}
-
-export async function fetchIpInfoGeo(ip, token) {
-  const resolvedToken = token || (await getIpInfoToken());
-  const lookupInfo = await fetchIpInfoEndpoint(
-    IPINFO_LOOKUP_ENDPOINT,
-    ip,
-    resolvedToken
-  ).catch(() => null);
-  const lookupGeo = normalizeIpInfoGeo(lookupInfo);
-
-  if (lookupGeo.country || lookupGeo.countryCode || lookupGeo.state) {
-    return {...lookupGeo, source: "ipinfo-lookup"};
-  }
-
-  const liteInfo = await fetchIpInfoEndpoint(
-    IPINFO_LITE_ENDPOINT,
-    ip,
-    resolvedToken
-  ).catch(() => null);
-  const liteGeo = normalizeIpInfoGeo(liteInfo);
-
-  if (liteGeo.country || liteGeo.countryCode) {
-    return {...liteGeo, source: "ipinfo-lite"};
   }
 
   return null;
@@ -236,21 +296,70 @@ export async function fetchIpInfoGeo(ip, token) {
 export async function getRequestTracking(request) {
   const ip = getClientIp(request);
   const headerCountryCode = getCountryCodeFromHeaders(request);
-  const geo = ip ? await fetchIpInfoGeo(ip) : null;
+  const geo = ip ? await fetchIpGeolocationGeo(ip) : null;
 
   return {
     ip,
     userAgent: request.headers.get("user-agent") || "",
     referrer: request.headers.get("referer") || "",
+    hostname: geo?.hostname || "",
     countryCode: geo?.countryCode || headerCountryCode || "",
+    countryCode3: geo?.countryCode3 || "",
+    countryOfficialName: geo?.countryOfficialName || "",
+    countryCapital: geo?.countryCapital || "",
+    continentCode: geo?.continentCode || "",
+    continent: geo?.continent || "",
     country: geo?.country || "",
     state: geo?.state || "",
     stateCode: geo?.stateCode || "",
+    district: geo?.district || "",
     city: geo?.city || "",
+    locality: geo?.locality || "",
+    accuracyRadius: geo?.accuracyRadius ?? "",
+    locationConfidence: geo?.locationConfidence || "",
+    dmaCode: geo?.dmaCode || "",
     postalCode: geo?.postalCode || "",
     latitude: geo?.latitude || "",
     longitude: geo?.longitude || "",
+    isEu: geo?.isEu ?? "",
+    countryFlag: geo?.countryFlag || "",
+    geonameId: geo?.geonameId || "",
+    countryEmoji: geo?.countryEmoji || "",
+    callingCode: geo?.callingCode || "",
+    countryTld: geo?.countryTld || "",
+    languages: Array.isArray(geo?.languages) ? geo.languages : [],
+    currencyCode: geo?.currencyCode || "",
+    currencyName: geo?.currencyName || "",
+    currencySymbol: geo?.currencySymbol || "",
+    asn: geo?.asn || "",
+    asnOrganization: geo?.asnOrganization || "",
+    asnCountry: geo?.asnCountry || "",
+    asnType: geo?.asnType || "",
+    asnDomain: geo?.asnDomain || "",
+    asnDateAllocated: geo?.asnDateAllocated || "",
+    asnRir: geo?.asnRir || "",
+    companyName: geo?.companyName || "",
+    companyType: geo?.companyType || "",
+    companyDomain: geo?.companyDomain || "",
+    networkRoute: geo?.networkRoute || "",
+    networkConnectionType: geo?.networkConnectionType || "",
+    networkIsAnycast: geo?.networkIsAnycast ?? "",
     timezone: geo?.timezone || "",
+    timezoneOffset: geo?.timezoneOffset ?? "",
+    timezoneOffsetWithDst: geo?.timezoneOffsetWithDst ?? "",
+    timezoneCurrentTime: geo?.timezoneCurrentTime || "",
+    timezoneCurrentTimeUnix: geo?.timezoneCurrentTimeUnix ?? "",
+    timezoneCurrentAbbreviation: geo?.timezoneCurrentAbbreviation || "",
+    timezoneCurrentName: geo?.timezoneCurrentName || "",
+    timezoneStandardAbbreviation: geo?.timezoneStandardAbbreviation || "",
+    timezoneStandardName: geo?.timezoneStandardName || "",
+    timezoneIsDst: geo?.timezoneIsDst ?? "",
+    timezoneDstSavings: geo?.timezoneDstSavings ?? "",
+    timezoneDstExists: geo?.timezoneDstExists ?? "",
+    timezoneDstAbbreviation: geo?.timezoneDstAbbreviation || "",
+    timezoneDstName: geo?.timezoneDstName || "",
+    timezoneDstStart: geo?.timezoneDstStart || {},
+    timezoneDstEnd: geo?.timezoneDstEnd || {},
     locationSource: geo?.source || (headerCountryCode ? "headers" : ""),
     capturedAt: new Date().toISOString(),
   };

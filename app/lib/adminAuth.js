@@ -217,7 +217,7 @@ export async function createInitialSetup(input = {}) {
     updatedAt: now,
   });
   await updateIntegrationsConfig({
-    ipInfoToken: String(input.ipInfoToken || "").trim(),
+    ipGeolocationApiKey: String(input.ipGeolocationApiKey || "").trim(),
   });
 
   return {email, firstName, lastName, name};

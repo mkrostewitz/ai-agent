@@ -98,6 +98,7 @@
 .navTab,
 .ghostButton,
 .primaryButton,
+.secondaryButton,
 .dangerButton,
 .iconButton,
 .iconDangerButton {
@@ -135,10 +136,17 @@
 }
 
 .primaryButton:disabled,
+.secondaryButton:disabled,
 .dangerButton:disabled,
 .ghostButton:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.secondaryButton {
+  border-color: #0e273d;
+  background: #0e273d;
+  color: #ffffff;
 }
 
 .dangerButton {
@@ -669,21 +677,35 @@
 }
 
 .connectionChipDisconnected {
-  border-color: #d8e0e6;
-  background: #eef2f4;
-  color: #657482;
+  border-color: #f7c876;
+  background: #fffbeb;
+  color: #92400e;
 }
 
-.ipInfoControls {
+.connectionChipError {
+  border-color: #f2c7bd;
+  background: #fff2ef;
+  color: #9f1d13;
+}
+
+.ipGeoControls {
   display: flex;
   align-items: flex-end;
   gap: 18px 22px;
   flex-wrap: wrap;
 }
 
-.ipInfoTokenField {
+.ipGeoKeyField {
   width: min(100%, 560px);
   flex: 0 1 560px;
+}
+
+.integrationFooterActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .mailHeaderActions {
@@ -808,7 +830,7 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.ipInfoField {
+.ipGeoField {
   position: relative;
 }
 
@@ -1027,7 +1049,7 @@
   font-weight: 800;
 }
 
-.ipInfoControls .checkboxField {
+.ipGeoControls .checkboxField {
   min-height: 42px;
 }
 
@@ -1507,6 +1529,7 @@
 
   .navTab,
   .dangerButton,
+  .secondaryButton,
   .ghostButton {
     justify-content: flex-start;
     width: 100%;
@@ -1532,6 +1555,8 @@
   .topActions .statusPill,
   .sectionActions .ghostButton,
   .sectionActions .primaryButton,
+  .sectionActions .secondaryButton,
+  .sectionActions .dangerButton,
   .sectionHeader > .ghostButton,
   .sectionHeader > .primaryButton,
   .modalActions .ghostButton {
@@ -1579,12 +1604,21 @@
     max-height: calc(100vh - 20px);
   }
 
-  .ipInfoControls {
+  .ipGeoControls {
     align-items: stretch;
   }
 
   .mailFooterRow {
     align-items: stretch;
+  }
+
+  .integrationFooterActions {
+    justify-content: stretch;
+  }
+
+  .integrationFooterActions .secondaryButton,
+  .integrationFooterActions .dangerButton {
+    width: 100%;
   }
 
   .mailPasswordActions {
@@ -1593,15 +1627,17 @@
     width: 100%;
   }
 
-  .mailPasswordActions .dangerButton {
+  .mailPasswordActions .dangerButton,
+  .mailPasswordActions .ghostButton,
+  .mailPasswordActions .primaryButton {
     width: 100%;
   }
 
-  .ipInfoTokenField {
+  .ipGeoKeyField {
     flex-basis: 100%;
   }
 
-  .ipInfoControls .checkboxField {
+  .ipGeoControls .checkboxField {
     min-height: auto;
   }
 }
@@ -1684,10 +1720,18 @@
   box-shadow: 0 10px 22px rgba(88, 26, 208, 0.18);
 }
 
+.secondaryButton {
+  border-color: var(--brand-strong);
+  background: var(--brand-strong);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(45, 28, 82, 0.14);
+}
+
 .brandMark,
 .navTab,
 .ghostButton,
 .primaryButton,
+.secondaryButton,
 .iconButton,
 .iconDangerButton,
 .modalCloseButton,
@@ -1759,15 +1803,21 @@
 }
 
 .connectionChipConnected {
-  border-color: rgba(110, 38, 245, 0.18);
-  background: var(--brand-muted);
-  color: #2c1c52;
+  border-color: #a8d8c0;
+  background: #ecfdf3;
+  color: #067647;
 }
 
 .connectionChipDisconnected {
-  border-color: rgba(75, 85, 99, 0.14);
-  background: #f7f7fb;
-  color: var(--subtext);
+  border-color: #f7c876;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.connectionChipError {
+  border-color: #f2c7bd;
+  background: #fff2ef;
+  color: #9f1d13;
 }
 
 .ghostButton,

@@ -41,11 +41,11 @@ export default function SetupForm() {
     email: "",
     password: "",
     confirmPassword: "",
-    ipInfoToken: "",
+    ipGeolocationApiKey: "",
   });
   const [error, setError] = useState("");
   const [databaseStatus, setDatabaseStatus] = useState(INITIAL_DATABASE_STATUS);
-  const [isIpInfoHelpOpen, setIsIpInfoHelpOpen] = useState(false);
+  const [isIpGeolocationHelpOpen, setIsIpGeolocationHelpOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function updateField(key, value) {
@@ -153,7 +153,7 @@ export default function SetupForm() {
           name,
           email: form.email,
           password: form.password,
-          ipInfoToken: form.ipInfoToken,
+          ipGeolocationApiKey: form.ipGeolocationApiKey,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -287,55 +287,59 @@ export default function SetupForm() {
           </label>
         </div>
 
-        <div className={`${styles.field} ${styles.ipInfoField}`}>
+        <div className={`${styles.field} ${styles.ipGeoField}`}>
           <div className={styles.fieldHeader}>
-            <span>IPInfo token</span>
+            <span>IPGeolocation.io API key</span>
             <div className={styles.helpAnchor}>
               <button
                 type="button"
                 className={styles.inlineHelpButton}
-                aria-label="Show IPInfo token setup help"
-                aria-expanded={isIpInfoHelpOpen}
+                aria-label="Show IPGeolocation.io setup help"
+                aria-expanded={isIpGeolocationHelpOpen}
                 onClick={() =>
-                  setIsIpInfoHelpOpen((currentValue) => !currentValue)
+                  setIsIpGeolocationHelpOpen((currentValue) => !currentValue)
                 }
               >
                 <FiHelpCircle aria-hidden="true" />
               </button>
-              {isIpInfoHelpOpen ? (
+              {isIpGeolocationHelpOpen ? (
                 <div className={styles.helpPopover} role="dialog">
                   <div className={styles.helpPopoverHeader}>
-                    <strong>IPInfo setup</strong>
+                    <strong>IPGeolocation.io setup</strong>
                     <button
                       type="button"
                       className={styles.helpCloseButton}
-                      aria-label="Close IPInfo setup help"
-                      onClick={() => setIsIpInfoHelpOpen(false)}
+                      aria-label="Close IPGeolocation.io setup help"
+                      onClick={() => setIsIpGeolocationHelpOpen(false)}
                     >
                       <FiX aria-hidden="true" />
                     </button>
                   </div>
                   <p>
-                    Create an IPinfo account, copy your API token from the
-                    dashboard, then paste it here. You can also leave it empty
-                    and add it later in System settings.
+                    Create an IPGeolocation.io account, copy an API key from
+                    the dashboard, then paste it here. The key is used
+                    server-side to store city, country, latitude, and longitude
+                    for conversations.
                   </p>
                   <a
-                    href="https://ipinfo.io/signup"
+                    href="https://app.ipgeolocation.io/dashboard"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Set up IPinfo account <FiExternalLink aria-hidden="true" />
+                    Open IPGeolocation.io dashboard{" "}
+                    <FiExternalLink aria-hidden="true" />
                   </a>
                 </div>
               ) : null}
             </div>
           </div>
           <input
-            value={form.ipInfoToken}
-            onChange={(event) => updateField("ipInfoToken", event.target.value)}
+            value={form.ipGeolocationApiKey}
+            onChange={(event) =>
+              updateField("ipGeolocationApiKey", event.target.value)
+            }
             autoComplete="off"
-            placeholder="Optional"
+            placeholder="Optional API key"
           />
         </div>
 

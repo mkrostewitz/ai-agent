@@ -9,6 +9,7 @@ import {
   FiCpu,
   FiDatabase,
   FiExternalLink,
+  FiHelpCircle,
   FiMapPin,
   FiMessageSquare,
   FiPlus,
@@ -76,10 +77,10 @@ const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_SYSTEM = {
-  ipInfoConfigured: false,
-  ipInfoTokenPreview: "",
-  ipInfoToken: "",
-  clearIpInfoToken: false,
+  ipGeolocationConfigured: false,
+  ipGeolocationApiKeyPreview: "",
+  ipGeolocationApiKey: "",
+  clearIpGeolocationApiKey: false,
   mail: {
     provider: "apple",
     providerLabel: "Apple iCloud Mail",
@@ -306,10 +307,10 @@ function textToRecipients(value) {
 function buildSystemPayload(system = {}) {
   const payload = {};
 
-  if (system.ipInfoToken?.trim()) {
-    payload.ipInfoToken = system.ipInfoToken;
-  } else if (system.clearIpInfoToken) {
-    payload.clearIpInfoToken = true;
+  if (system.ipGeolocationApiKey?.trim()) {
+    payload.ipGeolocationApiKey = system.ipGeolocationApiKey;
+  } else if (system.clearIpGeolocationApiKey) {
+    payload.clearIpGeolocationApiKey = true;
   }
 
   payload.mail = normalizeMailDraft(system.mail);
@@ -326,23 +327,63 @@ function normalizeLocation(tracking = {}) {
   );
 }
 
-function mapUrl(tracking = {}) {
-  const latitude = Number(tracking.latitude);
-  const longitude = Number(tracking.longitude);
+function cleanText(value) {
+  return value === null || value === undefined ? "" : String(value).trim();
+}
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "";
+function parseCoordinate(value, min, max) {
+  const text = cleanText(value);
+  if (!text) return null;
 
-  const delta = 0.08;
-  const bbox = [
+  const normalized = text.includes(".") ? text : text.replace(",", ".");
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return null;
+
+  const coordinate = Number(normalized);
+  return Number.isFinite(coordinate) && coordinate >= min && coordinate <= max
+    ? coordinate
+    : null;
+}
+
+function getCoordinatePair(tracking = {}) {
+  const latitude = parseCoordinate(tracking.latitude ?? tracking.lat, -90, 90);
+  const longitude = parseCoordinate(
+    tracking.longitude ?? tracking.lng ?? tracking.lon,
+    -180,
+    180
+  );
+
+  if (latitude === null || longitude === null) return null;
+  if (Math.abs(latitude) < 0.000001 && Math.abs(longitude) < 0.000001) {
+    return null;
+  }
+
+  return {latitude, longitude};
+}
+
+function pointBbox({latitude, longitude}) {
+  const delta = 0.35;
+  return [
     longitude - delta,
     latitude - delta,
     longitude + delta,
     latitude + delta,
-  ].join(",");
+  ];
+}
 
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
-    bbox
-  )}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
+function formatCoordinate(value) {
+  return Number(value.toFixed(6)).toString();
+}
+
+function mapUrl(tracking = {}) {
+  const coordinates = getCoordinatePair(tracking);
+  if (!coordinates) return "";
+
+  const bbox = pointBbox(coordinates).map(formatCoordinate).join(",");
+  const marker = [coordinates.latitude, coordinates.longitude]
+    .map(formatCoordinate)
+    .join(",");
+
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`;
 }
 
 function Toast({toast, onClose}) {
@@ -970,12 +1011,17 @@ function SettingsSection({
   onSendTestEmail,
   saving,
 }) {
-  const isIpInfoConnected =
-    Boolean(system.ipInfoConfigured) && !system.clearIpInfoToken;
-  const showIpInfoTokenField =
-    !system.ipInfoConfigured ||
-    Boolean(system.clearIpInfoToken) ||
-    Boolean(system.ipInfoToken?.trim());
+  const [isIpGeolocationHelpOpen, setIsIpGeolocationHelpOpen] = useState(false);
+  const isIpGeolocationConnected =
+    Boolean(system.ipGeolocationConfigured) &&
+    !system.clearIpGeolocationApiKey;
+  const showIpGeolocationApiKeyField =
+    !system.ipGeolocationConfigured ||
+    Boolean(system.clearIpGeolocationApiKey) ||
+    Boolean(system.ipGeolocationApiKey?.trim());
+  const ipGeolocationSummary = isIpGeolocationConnected
+    ? `API key ${system.ipGeolocationApiKeyPreview || "configured"}`
+    : "Add an API key to enrich conversations with location data.";
   const mail = normalizeMailDraft(system.mail);
   const mailRecipients = Array.isArray(mail.recipients) ? mail.recipients : [];
   const mailMissing = Array.isArray(mail.missing) ? mail.missing : [];
@@ -986,7 +1032,9 @@ function SettingsSection({
     : "Needs config";
   const mailStatusClass = mail.active
     ? styles.connectionChipConnected
-    : styles.connectionChipDisconnected;
+    : mail.enabled === false
+    ? styles.connectionChipDisconnected
+    : styles.connectionChipError;
   const mailEditable = mail.provider !== "disabled";
   const selectedNamespace = String(settings.namespace || "").trim();
   const namespaceSelectOptions = selectedNamespace
@@ -1171,41 +1219,95 @@ function SettingsSection({
       <div className={styles.integrationPanel}>
         <div className={styles.integrationHeader}>
           <div className={styles.titleBlock}>
-            <h2>IPInfo</h2>
-            <p>
-              {isIpInfoConnected
-                ? `Token ${system.ipInfoTokenPreview || "configured"}`
-                : "Add a token to enrich conversations with location data."}
-            </p>
+            <h2>IPGeolocation.io</h2>
+            <p>{ipGeolocationSummary}</p>
           </div>
-          <span
-            className={`${styles.connectionChip} ${
-              isIpInfoConnected
-                ? styles.connectionChipConnected
-                : styles.connectionChipDisconnected
-            }`}
-          >
-            {isIpInfoConnected ? "Connected" : "Not connected"}
-          </span>
+          <div className={styles.sectionActions}>
+            <div className={styles.helpAnchor}>
+              <button
+                type="button"
+                className={styles.inlineHelpButton}
+                aria-label="Show IPGeolocation.io setup help"
+                aria-expanded={isIpGeolocationHelpOpen}
+                onClick={() =>
+                  setIsIpGeolocationHelpOpen((currentValue) => !currentValue)
+                }
+              >
+                <FiHelpCircle aria-hidden="true" />
+              </button>
+              {isIpGeolocationHelpOpen ? (
+                <div className={styles.helpPopover} role="dialog">
+                  <div className={styles.helpPopoverHeader}>
+                    <strong>IPGeolocation.io setup</strong>
+                    <button
+                      type="button"
+                      className={styles.helpCloseButton}
+                      aria-label="Close IPGeolocation.io setup help"
+                      onClick={() => setIsIpGeolocationHelpOpen(false)}
+                    >
+                      <FiX aria-hidden="true" />
+                    </button>
+                  </div>
+                  <p>
+                    Create an IPGeolocation.io account, copy an API key from
+                    the dashboard, then paste it here. The key is used
+                    server-side to store city, country, latitude, and longitude
+                    for conversations.
+                  </p>
+                  <a
+                    href="https://app.ipgeolocation.io/dashboard"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open IPGeolocation.io dashboard{" "}
+                    <FiExternalLink aria-hidden="true" />
+                  </a>
+                </div>
+              ) : null}
+            </div>
+            <span
+              className={`${styles.connectionChip} ${
+                isIpGeolocationConnected
+                  ? styles.connectionChipConnected
+                  : styles.connectionChipDisconnected
+              }`}
+            >
+              {isIpGeolocationConnected ? "Connected" : "Not connected"}
+            </span>
+          </div>
         </div>
 
-        <div className={styles.ipInfoControls}>
-          {showIpInfoTokenField ? (
-            <label className={`${styles.field} ${styles.ipInfoTokenField}`}>
-              Token
+        {showIpGeolocationApiKeyField ? (
+          <div className={styles.ipGeoControls}>
+            <label className={`${styles.field} ${styles.ipGeoKeyField}`}>
+              API key
               <input
-                value={system.ipInfoToken || ""}
+                value={system.ipGeolocationApiKey || ""}
                 onChange={(event) =>
                   setSystem((current) => ({
                     ...current,
-                    ipInfoToken: event.target.value,
-                    clearIpInfoToken: false,
+                    ipGeolocationApiKey: event.target.value,
+                    clearIpGeolocationApiKey: false,
                   }))
                 }
                 autoComplete="off"
-                placeholder="Optional IPInfo token"
+                placeholder="Optional IPGeolocation.io API key"
               />
             </label>
+          </div>
+        ) : null}
+
+        <div className={styles.integrationFooterActions}>
+          {showIpGeolocationApiKeyField ? (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onSave}
+              disabled={saving || !system.ipGeolocationApiKey?.trim()}
+            >
+              <FiCheck aria-hidden="true" />
+              {saving ? "Connecting..." : "Connect"}
+            </button>
           ) : (
             <button
               type="button"
@@ -1213,8 +1315,8 @@ function SettingsSection({
               onClick={() =>
                 setSystem((current) => ({
                   ...current,
-                  clearIpInfoToken: true,
-                  ipInfoToken: "",
+                  clearIpGeolocationApiKey: true,
+                  ipGeolocationApiKey: "",
                 }))
               }
             >
@@ -1234,24 +1336,6 @@ function SettingsSection({
             <span className={`${styles.connectionChip} ${mailStatusClass}`}>
               {mailStatus}
             </span>
-            <button
-              type="button"
-              className={styles.ghostButton}
-              onClick={onSendTestEmail}
-              disabled={saving}
-            >
-              <FiSend aria-hidden="true" />
-              Send test
-            </button>
-            <button
-              type="button"
-              className={`${styles.primaryButton} ${styles.mailSaveButton}`}
-              onClick={onSave}
-              disabled={saving}
-            >
-              <FiSave aria-hidden="true" />
-              {saving ? "Saving..." : "Save"}
-            </button>
           </div>
         </div>
 
@@ -1407,6 +1491,24 @@ function SettingsSection({
             >
               <FiTrash2 aria-hidden="true" />
               Clear settings
+            </button>
+            <button
+              type="button"
+              className={styles.ghostButton}
+              onClick={onSendTestEmail}
+              disabled={saving}
+            >
+              <FiSend aria-hidden="true" />
+              Send test
+            </button>
+            <button
+              type="button"
+              className={`${styles.primaryButton} ${styles.mailSaveButton}`}
+              onClick={onSave}
+              disabled={saving}
+            >
+              <FiSave aria-hidden="true" />
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </div>
