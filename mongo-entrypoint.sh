@@ -13,6 +13,8 @@ root_pass="${MONGO_INITDB_ROOT_PASSWORD:-}"
 app_user="${MONGO_APP_USERNAME:-}"
 app_pass="${MONGO_APP_PASSWORD:-}"
 app_db="${MONGO_INITDB_DATABASE:-ai-agent}"
+mongo_reset_on_start="${MONGO_RESET_ON_START:-false}"
+mongo_reset_confirm="${MONGO_RESET_CONFIRM:-}"
 
 if [[ -z "$root_user" || -z "$root_pass" || -z "$app_user" || -z "$app_pass" ]]; then
   echo "Missing required Mongo credentials (root/app). Check .env.docker." >&2
@@ -42,6 +44,29 @@ wait_for_mongo() {
 
 shutdown_mongo() {
   mongosh --quiet --eval "db.adminCommand({ shutdown: 1 })" >/dev/null 2>&1 || true
+}
+
+reset_data_if_requested() {
+  case "${mongo_reset_on_start,,}" in
+    true|1|yes) ;;
+    *) return 0 ;;
+  esac
+
+  if [[ "$mongo_reset_confirm" != "delete-data" ]]; then
+    echo "MONGO_RESET_ON_START is enabled, but MONGO_RESET_CONFIRM is not 'delete-data'." >&2
+    echo "Refusing to reset MongoDB data." >&2
+    exit 1
+  fi
+
+  if [[ "$DB_PATH" != "/data/db" ]]; then
+    echo "Refusing to reset unexpected MongoDB path: $DB_PATH" >&2
+    exit 1
+  fi
+
+  echo "MONGO_RESET_ON_START=true; deleting MongoDB data in $DB_PATH before startup."
+  shopt -s dotglob nullglob
+  rm -rf "$DB_PATH"/*
+  shopt -u dotglob nullglob
 }
 
 ensure_users() {
@@ -179,7 +204,7 @@ const settingsCount = settingsCol.estimatedDocumentCount();
 if (settingsCount === 0) {
   settingsCol.insertOne({
     instruction:
-      "Answer as a professional personal assistant for the person configured during setup.\n- Use uploaded CVs, resumes, and indexed website data as the source of truth.\n- For background and career questions, lead with the most recent or current positions before older history.\n- Use only the provided context; if the answer is not there, say you don't know.\n- Respond in 1-2 sentences with natural, professional wording.",
+      "Answer as a professional personal assistant for the person configured during setup.\n- Use uploaded CVs, resumes, and indexed website data as the source of truth.\n- For background and career questions, answer in reverse chronological order: current/latest positions first, then the next most recent roles.\n- For broad background answers, include the current/latest organization(s) plus the next three distinct prior organizations when they are present in the CV context.\n- Do not skip from a current role to much older roles when newer intermediate roles are present in the context.\n- Mention older early-career employers only when they are directly relevant or explicitly requested.\n- Use only the provided context; if the answer is not there, say you don't know.\n- Respond concisely with natural, professional wording.",
     model: env.OLLAMA_MODEL || "phi3:mini",
     temperature: 0.2,
     max_tokens: 2000,
@@ -195,6 +220,7 @@ if (settingsCount === 0) {
 JS
 }
 
+reset_data_if_requested
 start_noauth
 wait_for_mongo
 ensure_users
