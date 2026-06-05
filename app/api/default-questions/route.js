@@ -1,5 +1,9 @@
 import {NextResponse} from "next/server";
-import {MongoClient} from "mongodb";
+import {
+  createMongoClient,
+  getMongoDbName,
+  hasMongoConfig,
+} from "@/app/lib/mongo";
 import {widgetOptionsResponse, withWidgetCors} from "../agents/cors";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +23,10 @@ export async function GET(req) {
       url.searchParams.get("locale")?.toLowerCase() || FALLBACK_LOCALE;
 
     const {
-      MONGODB_URI,
-      MONGODB_DB,
       MONGODB_DEFAULT_QUESTIONS_COLLECTION = "defaultQuestions",
     } = process.env;
 
-    if (!MONGODB_URI || !MONGODB_DB) {
+    if (!hasMongoConfig()) {
       return withWidgetCors(
         NextResponse.json(
           {error: "Missing MongoDB config. Set MONGODB_URI and MONGODB_DB."},
@@ -33,11 +35,11 @@ export async function GET(req) {
       );
     }
 
-    client = new MongoClient(MONGODB_URI);
+    client = createMongoClient();
     await client.connect();
     console.log("[mongo] Connected: /api/default-questions");
 
-    const db = client.db(MONGODB_DB);
+    const db = client.db(getMongoDbName());
     const collection = db.collection(MONGODB_DEFAULT_QUESTIONS_COLLECTION);
 
     const docs = await collection

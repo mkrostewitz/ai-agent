@@ -5,10 +5,14 @@ import {OllamaEmbeddings} from "@langchain/ollama";
 import {RecursiveCharacterTextSplitter} from "@langchain/textsplitters";
 import * as cheerio from "cheerio";
 import {Document} from "langchain/document";
-import {MongoClient} from "mongodb";
 
 import buildIds from "../helpers/buildIds.js";
 import normalizeText from "../helpers/normalizeText.js";
+import {
+  createMongoClient,
+  getMongoDbName,
+  hasMongoConfig,
+} from "./mongo.js";
 import {getOllamaRequestOptions} from "./ollamaRuntime.js";
 
 export const DEFAULT_WEB_CHUNK_SIZE = 500;
@@ -511,14 +515,12 @@ export async function indexWebsiteUrls(input = {}) {
   const maxPages = cleanNumber(input.maxPages, crawl ? DEFAULT_WEB_MAX_PAGES : 1);
 
   const {
-    MONGODB_URI,
-    MONGODB_DB,
     MONGODB_DEFAULT_EMBEDDING_COLLECTION,
     MONGODB_INDEX,
     OLLAMA_BASE_URL,
   } = process.env;
 
-  if (!MONGODB_URI || !MONGODB_DB || !MONGODB_DEFAULT_EMBEDDING_COLLECTION || !MONGODB_INDEX) {
+  if (!hasMongoConfig() || !MONGODB_DEFAULT_EMBEDDING_COLLECTION || !MONGODB_INDEX) {
     throw new Error(
       "Missing MongoDB config. Set MONGODB_URI, MONGODB_DB, MONGODB_DEFAULT_EMBEDDING_COLLECTION, MONGODB_INDEX."
     );
@@ -526,9 +528,9 @@ export async function indexWebsiteUrls(input = {}) {
 
   let client;
   try {
-    client = new MongoClient(MONGODB_URI);
+    client = createMongoClient();
     await client.connect();
-    const db = client.db(MONGODB_DB);
+    const db = client.db(getMongoDbName());
     const collection = db.collection(MONGODB_DEFAULT_EMBEDDING_COLLECTION);
     const deleted = input.replace
       ? await deleteExistingSources(collection, namespace, validated, canonicalOrigin)

@@ -2,7 +2,6 @@ import {NextResponse} from "next/server";
 import {PDFLoader} from "@langchain/community/document_loaders/fs/pdf";
 import {RecursiveCharacterTextSplitter} from "@langchain/textsplitters";
 import {OllamaEmbeddings} from "@langchain/ollama";
-import {MongoClient} from "mongodb";
 import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
 import {Document} from "langchain/document";
 import {embedRequestSchema} from "../validation";
@@ -10,6 +9,11 @@ import normalizeText from "@/app/helpers/normalizeText";
 import buildIds from "@/app/helpers/buildIds";
 import {requireAdminApi} from "@/app/lib/adminAuth";
 import {storeBuffer} from "@/app/lib/fileStorage";
+import {
+  createMongoClient,
+  getMongoDbName,
+  hasMongoConfig,
+} from "@/app/lib/mongo";
 import {getOllamaRequestOptions} from "@/app/lib/ollamaRuntime";
 
 const DEFAULT_CHUNK_SIZE = 500;
@@ -83,16 +87,13 @@ export async function POST(req) {
     const chunkOverlap = DEFAULT_CHUNK_OVERLAP;
 
     const {
-      MONGODB_URI,
-      MONGODB_DB,
       MONGODB_DEFAULT_EMBEDDING_COLLECTION,
       MONGODB_INDEX,
       OLLAMA_BASE_URL,
     } = process.env;
 
     if (
-      !MONGODB_URI ||
-      !MONGODB_DB ||
+      !hasMongoConfig() ||
       !MONGODB_DEFAULT_EMBEDDING_COLLECTION ||
       !MONGODB_INDEX
     ) {
@@ -106,10 +107,10 @@ export async function POST(req) {
     }
 
     // Init MongoDB + embeddings
-    client = new MongoClient(MONGODB_URI);
+    client = createMongoClient();
     await client.connect();
     console.log("[mongo] Connected: /api/embed/pdf");
-    const db = client.db(MONGODB_DB);
+    const db = client.db(getMongoDbName());
     const collection = db.collection(MONGODB_DEFAULT_EMBEDDING_COLLECTION);
 
     const embeddings = new OllamaEmbeddings({

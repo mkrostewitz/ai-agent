@@ -1,8 +1,12 @@
 import {NextResponse} from "next/server";
-import {MongoClient} from "mongodb";
 import {Ollama} from "@langchain/ollama";
 import {OllamaEmbeddings} from "@langchain/ollama";
 import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
+import {
+  createMongoClient,
+  getMongoDbName,
+  hasMongoConfig,
+} from "@/app/lib/mongo";
 import {getOllamaRequestOptions} from "@/app/lib/ollamaRuntime";
 import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
@@ -312,13 +316,12 @@ function cosineSimilarity(a = [], b = []) {
 async function loadRuntimeConfig() {
   let client;
   try {
-    const {MONGODB_URI, MONGODB_DB} = process.env;
-    if (!MONGODB_URI || !MONGODB_DB) return {profile: null, settings: null};
+    if (!hasMongoConfig()) return {profile: null, settings: null};
 
-    client = new MongoClient(MONGODB_URI);
+    client = createMongoClient();
     await client.connect();
     console.log("[mongo] Connected: /api/agents/chat/stream (runtime-config)");
-    const db = client.db(MONGODB_DB);
+    const db = client.db(getMongoDbName());
     const [settings, user] = await Promise.all([
       db
         .collection(SETTINGS_COLLECTION)
@@ -362,14 +365,13 @@ async function loadRuntimeConfig() {
 async function retrieveContext(question, namespace, retrievalK) {
   let client;
   try {
-    const {MONGODB_URI, MONGODB_DB} = process.env;
-    if (!MONGODB_URI || !MONGODB_DB) return [];
+    if (!hasMongoConfig()) return [];
 
-    client = new MongoClient(MONGODB_URI);
+    client = createMongoClient();
     await client.connect();
     console.log("[mongo] Connected: /api/agents/chat/stream (embeddings)");
 
-    const db = client.db(MONGODB_DB);
+    const db = client.db(getMongoDbName());
     const collection = db.collection(EMBEDDINGS_COLLECTION);
     const embeddings = new OllamaEmbeddings({
       model: "nomic-embed-text",
@@ -428,13 +430,13 @@ async function retrieveContext(question, namespace, retrievalK) {
       console.warn(
         "Chat stream: Atlas vector search unavailable, using local cosine fallback"
       );
+      let fallbackClient;
       try {
-        const {MONGODB_URI, MONGODB_DB} = process.env;
-        if (!MONGODB_URI || !MONGODB_DB) return [];
-        const fallbackClient = new MongoClient(MONGODB_URI);
+        if (!hasMongoConfig()) return [];
+        fallbackClient = createMongoClient();
         await fallbackClient.connect();
         console.log("[mongo] Connected: /api/agents/chat/stream (embeddings-fallback)");
-        const db = fallbackClient.db(MONGODB_DB);
+        const db = fallbackClient.db(getMongoDbName());
         const collection = db.collection(EMBEDDINGS_COLLECTION);
 
         const requestedK =
@@ -525,7 +527,6 @@ async function retrieveContext(question, namespace, retrievalK) {
           hits: ranked.length,
         });
 
-        await fallbackClient.close();
         return ranked;
       } catch (fallbackError) {
         console.warn("Chat stream: retrieval fallback failed", {
@@ -533,6 +534,8 @@ async function retrieveContext(question, namespace, retrievalK) {
           namespace: namespace || null,
         });
         return [];
+      } finally {
+        if (fallbackClient) await fallbackClient.close();
       }
     }
     console.warn("Chat stream: retrieval failed", {

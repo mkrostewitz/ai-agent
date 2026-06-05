@@ -28,6 +28,9 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=phi3:mini
 ```
 
+If the MongoDB password contains reserved URL characters such as `,`, `:`, `@`,
+`/`, `?`, `#`, or `%`, URL-encode the password inside `MONGODB_URI`.
+
 Admin users, password hashes, the session-signing secret, the optional IPInfo token, and mail delivery settings are configured through `/admin` and stored in MongoDB.
 
 Mail notification configuration:

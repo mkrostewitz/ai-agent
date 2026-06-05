@@ -89,6 +89,22 @@ OLLAMA_BASE_URL="http://ollama:11434"
 OLLAMA_HOST="http://ollama:11434"
 ```
 
+Keep `MONGO_APP_PASSWORD` as the raw MongoDB password. In `MONGODB_URI`, the
+password must be URL-encoded if it contains reserved characters such as `,`,
+`:`, `@`, `/`, `?`, `#`, or `%`. For example, a raw password containing `,` must
+use `%2C` at that character position inside `MONGODB_URI`.
+
+If the first-run admin form shows this error, the IPInfo token is not the
+problem; `MONGODB_URI` is malformed:
+
+```text
+Unable to parse aiagent_app:X with URL
+```
+
+Either use a URL-safe app password containing only letters and numbers, or keep
+the raw password in `MONGO_APP_PASSWORD` and use the URL-encoded version in
+`MONGODB_URI`.
+
 For conversation notification emails, keep a stable encryption key in
 `.env.docker`, then configure Apple/iCloud, Gmail, Microsoft, or custom SMTP in
 the `/admin` Settings tab. The SMTP password is encrypted before it is stored in
