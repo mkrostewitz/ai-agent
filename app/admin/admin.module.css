@@ -98,6 +98,7 @@
 .navTab,
 .ghostButton,
 .primaryButton,
+.dangerButton,
 .iconButton,
 .iconDangerButton {
   min-height: 40px;
@@ -134,9 +135,16 @@
 }
 
 .primaryButton:disabled,
+.dangerButton:disabled,
 .ghostButton:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.dangerButton {
+  border-color: #f0b6aa;
+  background: #fff2ef;
+  color: #a83a2a;
 }
 
 .ghostButton {
@@ -183,10 +191,80 @@
   margin-bottom: 18px;
 }
 
+.topActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .panel {
   display: grid;
   gap: 22px;
   padding: 24px;
+}
+
+.agentWorkspace,
+.agentSectionStack {
+  display: grid;
+  gap: 18px;
+}
+
+.agentConfigSection,
+.promptCard {
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.agentConfigSection {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  box-shadow: 0 18px 48px rgba(20, 33, 43, 0.08);
+}
+
+.agentUtilitySection {
+  padding-block: 16px;
+}
+
+.sectionHeader,
+.promptCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.promptCard {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: #f8fafb;
+}
+
+.promptList {
+  display: grid;
+  gap: 12px;
+}
+
+.promptTranslationGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.promptTranslationGrid textarea {
+  min-height: 76px;
 }
 
 .titleBlock {
@@ -196,6 +274,7 @@
 }
 
 .titleBlock h1,
+.sectionHeader h2,
 .detailHeader h2,
 .localePanel h2,
 .form h2,
@@ -210,6 +289,7 @@
   font-size: 1.55rem;
 }
 
+.sectionHeader h2,
 .detailHeader h2,
 .localePanel h2,
 .form h2,
@@ -300,6 +380,117 @@
   color: #14212b;
   font: inherit;
   font-weight: 300;
+}
+
+.field input[readonly] {
+  background: #f8fafb;
+  color: #657482;
+  cursor: default;
+}
+
+.selectRoot {
+  position: relative;
+  min-width: 0;
+}
+
+.selectButton {
+  min-height: 42px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #cbd5dc;
+  border-radius: 6px;
+  padding: 10px 11px;
+  background: #ffffff;
+  color: #14212b;
+  font: inherit;
+  font-weight: 300;
+  line-height: 1.2;
+  text-align: left;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease;
+}
+
+.selectButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectButton svg {
+  flex: 0 0 auto;
+  transition: transform 0.16s ease;
+}
+
+.selectButtonOpen,
+.selectButton:focus-visible {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  outline: none;
+}
+
+.selectButtonOpen svg {
+  transform: rotate(180deg);
+}
+
+.selectMenu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #cbd5dc;
+  border-radius: 8px;
+  padding: 6px;
+  background: #ffffff;
+  box-shadow: 0 18px 46px rgba(20, 33, 43, 0.18);
+}
+
+.selectOption {
+  min-height: 38px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #253541;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.selectOption:hover,
+.selectOption:focus-visible {
+  background: #eef2f4;
+  outline: none;
+}
+
+.selectOptionSelected {
+  background: #e4f7f4;
+  color: #0b514c;
+  font-weight: 500;
+}
+
+.selectOptionCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
 }
 
 .field textarea {
@@ -553,6 +744,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 10px;
+}
+
+.avatarUpload {
+  min-height: 88px;
 }
 
 .avatarChoice {
@@ -894,12 +1089,189 @@
   color: #9f1d13;
 }
 
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.modalPanel {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #cbd5dc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(20, 33, 43, 0.22);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #d8e0e6;
+  padding: 18px 20px;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  color: #14212b;
+  font-size: 1.3rem;
+  letter-spacing: 0;
+}
+
+.modalCloseButton {
+  width: 40px;
+  min-height: 40px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5dc;
+  border-radius: 6px;
+  padding: 0;
+  background: #ffffff;
+  color: #253541;
+}
+
+.modalBody {
+  display: grid;
+  gap: 18px;
+  overflow: auto;
+  padding: 20px;
+}
+
+.modalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.embedAgentSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafb;
+}
+
+.embedAgentSummary div:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.embedAgentSummary strong {
+  color: #14212b;
+  font-size: 1rem;
+}
+
+.embedAgentSummary span {
+  color: #657482;
+  font-size: 0.86rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.embedAgentAvatar {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #d8e0e6;
+}
+
+.embedAgentAvatar video,
+.embedAgentAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.embedControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.45fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.segmentedControl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  padding: 6px;
+  background: #f8fafb;
+}
+
+.segmentedButton {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 9px 12px;
+  background: transparent;
+  color: #51616f;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.segmentedButtonActive {
+  border-color: #0f766e;
+  background: #d9f2ef;
+  color: #0b514c;
+}
+
+.embedSnippetShell {
+  overflow: hidden;
+  border: 1px solid #1f2a44;
+  border-radius: 8px;
+  background: #0f1629;
+}
+
+.embedSnippetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  color: #dbeafe;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.embedCode {
+  margin: 0;
+  overflow: auto;
+  padding: 16px;
+  color: #dbeafe;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 @media (max-width: 1120px) {
   .settingsGrid,
   .setupGrid,
   .colorGrid,
   .sliderGrid,
   .localizedGrid,
+  .promptTranslationGrid,
   .statsGrid,
   .formGridCompact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -950,6 +1322,7 @@
   }
 
   .navTab,
+  .dangerButton,
   .ghostButton {
     justify-content: flex-start;
     width: 100%;
@@ -957,10 +1330,28 @@
 
   .topBand,
   .panelHeader,
+  .sectionHeader,
   .detailHeader,
   .integrationHeader {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .topActions,
+  .sectionActions,
+  .modalActions {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .topActions .primaryButton,
+  .topActions .statusPill,
+  .sectionActions .ghostButton,
+  .sectionActions .primaryButton,
+  .sectionHeader > .ghostButton,
+  .sectionHeader > .primaryButton,
+  .modalActions .ghostButton {
+    width: 100%;
   }
 
   .connectionChip {
@@ -972,15 +1363,34 @@
   .colorGrid,
   .sliderGrid,
   .localizedGrid,
+  .promptTranslationGrid,
   .statsGrid,
   .filterRow,
   .formGridCompact,
-  .websiteOptions {
+  .websiteOptions,
+  .embedControls {
+    grid-template-columns: 1fr;
+  }
+
+  .segmentedControl {
     grid-template-columns: 1fr;
   }
 
   .panel {
     padding: 18px;
+  }
+
+  .agentConfigSection {
+    padding: 18px;
+  }
+
+  .modalOverlay {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .modalPanel {
+    max-height: calc(100vh - 20px);
   }
 
   .ipInfoControls {
@@ -1032,6 +1442,8 @@
 
 .loginPanel,
 .panel,
+.agentConfigSection,
+.promptCard,
 .previewPane,
 .localePanel,
 .stat,
@@ -1039,7 +1451,10 @@
 .conversationList,
 .tableShell,
 .setupNote,
-.integrationPanel {
+.integrationPanel,
+.modalPanel,
+.embedAgentSummary,
+.segmentedControl {
   border-color: var(--card-border);
   border-radius: 14px;
   background: #ffffff;
@@ -1048,12 +1463,16 @@
 
 .setupNote,
 .integrationPanel,
+.agentConfigSection,
+.promptCard,
 .previewPane,
 .localePanel,
 .stat,
 .conversationDetail,
 .conversationList,
-.tableShell {
+.tableShell,
+.embedAgentSummary,
+.segmentedControl {
   background: rgba(255, 255, 255, 0.76);
 }
 
@@ -1071,11 +1490,14 @@
 .primaryButton,
 .iconButton,
 .iconDangerButton,
+.modalCloseButton,
+.segmentedButton,
 .inlineHelpButton,
 .helpCloseButton,
 .field input,
 .field textarea,
 .field select,
+.selectButton,
 .locationBand,
 .messageBubble,
 .toast {
@@ -1093,12 +1515,14 @@
 .locationBand small,
 .actionItem strong,
 .agentPreviewHeader span,
+.embedAgentSummary span,
 .stat span {
   color: var(--subtext);
 }
 
 .titleBlock h1,
 .titleBlock h2,
+.modalHeader h2,
 .detailHeader h2,
 .localePanel h2,
 .form h2,
@@ -1128,6 +1552,7 @@
 
 .navTabActive,
 .conversationItemActive,
+.segmentedButtonActive,
 .toastSuccess {
   border-color: var(--card-border-strong);
   background: var(--brand-muted);
@@ -1148,6 +1573,8 @@
 
 .ghostButton,
 .iconButton,
+.modalCloseButton,
+.segmentedButton,
 .inlineHelpButton,
 .helpCloseButton {
   border-color: var(--card-border);
@@ -1175,7 +1602,9 @@
 
 .field input,
 .field textarea,
-.field select {
+.field select,
+.selectButton,
+.selectMenu {
   border-color: rgba(88, 26, 208, 0.16);
   background: #ffffff;
   color: var(--text);
@@ -1183,17 +1612,42 @@
 
 .field input:focus,
 .field textarea:focus,
-.field select:focus {
+.field select:focus,
+.selectButtonOpen,
+.selectButton:focus-visible {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(110, 38, 245, 0.12);
   outline: none;
 }
 
+.selectMenu {
+  border-radius: 14px;
+  box-shadow: var(--shadow-strong);
+}
+
+.selectOptionSelected,
+.selectOption:hover,
+.selectOption:focus-visible {
+  background: var(--brand-muted);
+  color: #2c1c52;
+}
+
 .largeTextarea,
+.embedSnippetShell,
 .embedShell,
 .messageAssistant {
   background: var(--code-panel);
   color: #dbeafe;
+}
+
+.embedSnippetShell {
+  border-color: rgba(88, 26, 208, 0.18);
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.embedSnippetHeader {
+  border-bottom-color: rgba(255, 255, 255, 0.12);
 }
 
 .largeTextarea {
@@ -1214,6 +1668,7 @@
 
 .avatarChoice,
 .agentAvatarPreview,
+.embedAgentAvatar,
 .mapPlaceholder,
 .fileDrop {
   border-color: rgba(88, 26, 208, 0.18);

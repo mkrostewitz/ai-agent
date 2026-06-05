@@ -1,6 +1,7 @@
 import {NextResponse} from "next/server";
 
 import {requireAdminApi} from "@/app/lib/adminAuth";
+import {deleteStoredObject} from "@/app/lib/fileStorage";
 import {getDb} from "@/app/lib/mongo";
 
 export const runtime = "nodejs";
@@ -93,14 +94,53 @@ export async function DELETE(request) {
     }
 
     const db = await getDb();
-    const result = await db.collection(EMBEDDINGS_COLLECTION).deleteMany({
+    const match = {
       $and: [
         {$or: [{namespace}, {"metadata.namespace": namespace}]},
         {$or: [{source}, {"metadata.source": source}]},
       ],
-    });
+    };
+    const collection = db.collection(EMBEDDINGS_COLLECTION);
+    const storedObjects = await collection
+      .aggregate([
+        {$match: match},
+        {
+          $group: {
+            _id: {
+              bucket: {$ifNull: ["$metadata.storageBucket", "$storageBucket"]},
+              driver: {$ifNull: ["$metadata.storageDriver", "$storageDriver"]},
+              key: {$ifNull: ["$metadata.storageKey", "$storageKey"]},
+              visibility: {
+                $ifNull: ["$metadata.storageVisibility", "$storageVisibility"],
+              },
+            },
+          },
+        },
+        {$match: {"_id.key": {$type: "string", $ne: ""}}},
+      ])
+      .toArray();
 
-    return NextResponse.json({deleted: result.deletedCount});
+    const result = await collection.deleteMany(match);
+    const storageErrors = [];
+    let storageDeleted = 0;
+
+    for (const storedObject of storedObjects) {
+      try {
+        const deleted = await deleteStoredObject(storedObject._id);
+        if (deleted) storageDeleted += 1;
+      } catch (error) {
+        storageErrors.push({
+          key: storedObject._id.key,
+          message: error.message || "Unable to delete stored file.",
+        });
+      }
+    }
+
+    return NextResponse.json({
+      deleted: result.deletedCount,
+      storageDeleted,
+      storageErrors,
+    });
   } catch (error) {
     console.error("Admin documents DELETE error:", error);
     return NextResponse.json(

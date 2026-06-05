@@ -3,6 +3,7 @@ import {MongoClient} from "mongodb";
 import {Ollama} from "@langchain/ollama";
 import {OllamaEmbeddings} from "@langchain/ollama";
 import {MongoDBAtlasVectorSearch} from "@langchain/mongodb";
+import {getOllamaRequestOptions} from "@/app/lib/ollamaRuntime";
 
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "phi3:mini";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
@@ -362,6 +363,7 @@ async function retrieveContext(question, namespace, retrievalK) {
     const embeddings = new OllamaEmbeddings({
       model: "nomic-embed-text",
       baseUrl: OLLAMA_BASE_URL,
+      requestOptions: getOllamaRequestOptions(),
     });
     const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
       collection,
@@ -454,6 +456,7 @@ async function retrieveContext(question, namespace, retrievalK) {
         const fallbackEmbeddings = new OllamaEmbeddings({
           model: "nomic-embed-text",
           baseUrl: OLLAMA_BASE_URL,
+          requestOptions: getOllamaRequestOptions(),
         });
         const queryEmbedding = await fallbackEmbeddings.embedQuery(question);
         const boostProfessionalRecency =
@@ -573,8 +576,7 @@ export async function POST(req) {
     const responseLang =
       detectQuestionLanguage(question) ||
       normalizeLang(body?.lang) ||
-      normalizeLang(body?.locale) ||
-      normalizeLang(settings?.response_language);
+      normalizeLang(body?.locale);
     console.log("[rag] request", {
       namespace: namespace || null,
       retrievalK,
@@ -618,6 +620,7 @@ export async function POST(req) {
       maxTokens,
       topK,
       topP,
+      ...getOllamaRequestOptions(),
     });
 
     const encoder = new TextEncoder();

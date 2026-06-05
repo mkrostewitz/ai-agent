@@ -1,17 +1,24 @@
 "use client";
 
-import {useEffect, useMemo, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {
+  FiCheck,
+  FiChevronDown,
+  FiCode,
+  FiCopy,
   FiCpu,
   FiDatabase,
+  FiExternalLink,
   FiMapPin,
   FiMessageSquare,
+  FiPlus,
   FiRefreshCw,
   FiSave,
   FiSettings,
   FiTrash2,
   FiUpload,
   FiUser,
+  FiX,
 } from "react-icons/fi";
 
 import AdminHeader from "./AdminHeader";
@@ -39,6 +46,21 @@ const LANGUAGES = [
   {code: "de", label: "German"},
   {code: "it", label: "Italian"},
 ];
+
+const EMBED_MODE_OPTIONS = [
+  {id: "modal", label: "Launcher"},
+  {id: "embedded", label: "Inline"},
+];
+
+const EMBED_LANGUAGE_OPTIONS = [
+  {value: "browser", label: "Browser language"},
+  ...LANGUAGES.map((language) => ({
+    value: language.code,
+    label: language.label,
+  })),
+];
+
+const DEFAULT_EMBED_HOST = "https://your-agent-domain.com";
 
 const DEFAULT_SETTINGS = {
   instruction: "",
@@ -101,6 +123,81 @@ function setLocalizedValue(entries, lang, text) {
   return [...withoutLang, {lang, text}].sort((left, right) =>
     left.lang.localeCompare(right.lang)
   );
+}
+
+function createPromptDraft(prompt = {}) {
+  const translations = {};
+  LANGUAGES.forEach((language) => {
+    translations[language.code] = String(
+      prompt.translations?.[language.code] || ""
+    );
+  });
+
+  return {
+    clientId:
+      prompt.clientId ||
+      prompt.id ||
+      `prompt-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: prompt.id || "",
+    active: prompt.active !== false,
+    translations,
+  };
+}
+
+function promptLocalizedValue(prompt, lang) {
+  return prompt?.translations?.[lang] || "";
+}
+
+function setPromptLocalizedValue(prompts, index, lang, text) {
+  return prompts.map((prompt, promptIndex) =>
+    promptIndex === index
+      ? {
+          ...prompt,
+          translations: {
+            ...(prompt.translations || {}),
+            [lang]: text,
+          },
+        }
+      : prompt
+  );
+}
+
+function normalizeEmbedHost(value) {
+  const host = String(value || "").trim().replace(/\/+$/, "");
+  return host || DEFAULT_EMBED_HOST;
+}
+
+function buildEmbedScriptSnippet({host, language, mode}) {
+  const attrs = [
+    "async",
+    `src="${normalizeEmbedHost(host)}/scripts/chat-widget.js"`,
+  ];
+
+  if (mode === "embedded") {
+    attrs.push('data-mode="embedded"');
+    attrs.push('data-mount="#agent-chat-widget"');
+  }
+
+  if (language && language !== "browser") {
+    attrs.push(`data-lang="${language}"`);
+  }
+
+  return `<script ${attrs.join("\n  ")}>\n</script>`;
+}
+
+function buildEmbedSnippet({host, language, mode}) {
+  const script = buildEmbedScriptSnippet({host, language, mode});
+
+  if (mode !== "embedded") return script;
+
+  return `<div id="agent-chat-widget"></div>\n${script}`;
+}
+
+function isVideoAvatar(value) {
+  const src = String(value || "").trim();
+  if (!src) return false;
+  if (/^data:video\//i.test(src) || /^blob:/i.test(src)) return true;
+  return /\.(mp4|webm|ogg|mov)([?#].*)?$/i.test(src);
 }
 
 async function fetchJson(url, options = {}) {
@@ -174,62 +271,167 @@ function Stat({label, value}) {
   );
 }
 
-function AgentSection({agent, setAgent, onSave, saving}) {
+function SelectField({label, onChange, options, value}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selectedOption =
+    options.find((option) => option.value === value) || options[0];
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    function closeOnOutsideClick(event) {
+      if (!rootRef.current?.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [isOpen]);
+
+  function selectOption(nextValue) {
+    onChange(nextValue);
+    setIsOpen(false);
+  }
+
+  function handleButtonKeyDown(event) {
+    if (["ArrowDown", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      setIsOpen(true);
+    }
+    if (event.key === "Escape") {
+      setIsOpen(false);
+    }
+  }
+
   return (
-    <section className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div className={styles.titleBlock}>
-          <h1>Agent Profile</h1>
-        </div>
-        <button className={styles.primaryButton} onClick={onSave} disabled={saving}>
-          <FiSave aria-hidden="true" />
-          {saving ? "Saving..." : "Save"}
+    <div className={styles.field}>
+      <span>{label}</span>
+      <div className={styles.selectRoot} ref={rootRef}>
+        <button
+          type="button"
+          className={`${styles.selectButton} ${
+            isOpen ? styles.selectButtonOpen : ""
+          }`}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          onClick={() => setIsOpen((current) => !current)}
+          onKeyDown={handleButtonKeyDown}
+        >
+          <span>{selectedOption?.label || "Select"}</span>
+          <FiChevronDown aria-hidden="true" />
         </button>
-      </div>
 
-      <div className={styles.twoColumn}>
-        <div className={styles.form}>
-          <label className={styles.field}>
-            Agent name
-            <input
-              value={agent.name || ""}
-              onChange={(event) =>
-                setAgent((current) => ({...current, name: event.target.value}))
-              }
-            />
-          </label>
+        {isOpen ? (
+          <div className={styles.selectMenu} role="listbox">
+            {options.map((option) => {
+              const isSelected = option.value === value;
 
-          <label className={styles.field}>
-            Avatar URL
-            <input
-              value={agent.avatar || ""}
-              onChange={(event) =>
-                setAgent((current) => ({...current, avatar: event.target.value}))
-              }
-            />
-          </label>
-
-          <div className={styles.avatarGrid}>
-            {AVATAR_OPTIONS.map((avatar) => (
-              <button
-                key={avatar}
-                type="button"
-                className={`${styles.avatarChoice} ${
-                  agent.avatar === avatar ? styles.avatarChoiceActive : ""
-                }`}
-                onClick={() => setAgent((current) => ({...current, avatar}))}
-                title={avatar.split("/").pop()}
-              >
-                <video src={avatar} muted playsInline preload="metadata" />
-              </button>
-            ))}
+              return (
+                <button
+                  key={option.value || "__empty"}
+                  type="button"
+                  className={`${styles.selectOption} ${
+                    isSelected ? styles.selectOptionSelected : ""
+                  }`}
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => selectOption(option.value)}
+                >
+                  <span className={styles.selectOptionCheck}>
+                    {isSelected ? <FiCheck aria-hidden="true" /> : null}
+                  </span>
+                  <span>{option.label}</span>
+                </button>
+              );
+            })}
           </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EmbedModal({agent, onClose, onToast}) {
+  const [host, setHost] = useState(DEFAULT_EMBED_HOST);
+  const [language, setLanguage] = useState("browser");
+  const [mode, setMode] = useState("modal");
+  const [copied, setCopied] = useState(false);
+  const snippet = useMemo(
+    () => buildEmbedSnippet({host, language, mode}),
+    [host, language, mode]
+  );
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setHost(window.location.origin);
+    }
+  }, []);
+
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  async function copySnippet() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard is not available.");
+      }
+
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      onToast?.("success", "Embed snippet copied.");
+      setTimeout(() => setCopied(false), 1400);
+    } catch (error) {
+      onToast?.("error", error.message || "Could not copy embed snippet.");
+    }
+  }
+
+  function closeOnBackdrop(event) {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
+  return (
+    <div
+      className={styles.modalOverlay}
+      role="presentation"
+      onMouseDown={closeOnBackdrop}
+    >
+      <div
+        className={styles.modalPanel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="embed-modal-title"
+      >
+        <div className={styles.modalHeader}>
+          <div className={styles.titleBlock}>
+            <span className={styles.kicker}>
+              <FiCode aria-hidden="true" /> Website embed
+            </span>
+            <h2 id="embed-modal-title">Embed agent</h2>
+          </div>
+          <button
+            type="button"
+            className={styles.modalCloseButton}
+            aria-label="Close embed modal"
+            onClick={onClose}
+          >
+            <FiX aria-hidden="true" />
+          </button>
         </div>
 
-        <div className={styles.previewPane}>
-          <div className={styles.agentPreviewHeader}>
-            <div className={styles.agentAvatarPreview}>
-              {String(agent.avatar || "").endsWith(".mp4") ? (
+        <div className={styles.modalBody}>
+          <div className={styles.embedAgentSummary}>
+            <div className={styles.embedAgentAvatar}>
+              {isVideoAvatar(agent.avatar) ? (
                 <video src={agent.avatar} muted playsInline autoPlay loop />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -238,93 +440,453 @@ function AgentSection({agent, setAgent, onSave, saving}) {
             </div>
             <div>
               <strong>{agent.name || "Chatbot"}</strong>
-              <span>Online</span>
+              <span>{normalizeEmbedHost(host)}</span>
             </div>
           </div>
 
-          <div
-            className={styles.agentBubble}
-            style={{
-              background: agent.primary_color || "#6e26f5",
-              color: "#ffffff",
-            }}
-          >
-            {localizedValue(agent.starting_message, "en") || "How can I help today?"}
+          <div className={styles.embedControls}>
+            <label className={styles.field}>
+              Widget host
+              <input
+                type="url"
+                value={host}
+                onChange={(event) => setHost(event.target.value)}
+                placeholder={DEFAULT_EMBED_HOST}
+              />
+            </label>
+            <SelectField
+              label="Language"
+              options={EMBED_LANGUAGE_OPTIONS}
+              value={language}
+              onChange={setLanguage}
+            />
+          </div>
+
+          <div className={styles.segmentedControl} aria-label="Embed mode">
+            {EMBED_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`${styles.segmentedButton} ${
+                  mode === option.id ? styles.segmentedButtonActive : ""
+                }`}
+                aria-pressed={mode === option.id}
+                onClick={() => setMode(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className={styles.embedSnippetShell}>
+            <div className={styles.embedSnippetHeader}>
+              <span>{mode === "embedded" ? "Inline snippet" : "Launcher snippet"}</span>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={copySnippet}
+              >
+                <FiCopy aria-hidden="true" />
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <pre className={styles.embedCode}>
+              <code>{snippet}</code>
+            </pre>
+          </div>
+
+          <div className={styles.modalActions}>
+            <a
+              className={styles.ghostButton}
+              href="/widget-demo.html"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <FiExternalLink aria-hidden="true" />
+              Preview
+            </a>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className={styles.colorGrid}>
-        {[
-          ["primary_color", "Primary"],
-          ["secondary_color", "Secondary"],
-          ["button_color", "Button"],
-        ].map(([key, label]) => (
-          <label key={key} className={styles.field}>
-            {label}
-            <span className={styles.colorInput}>
-              <input
-                type="color"
-                value={agent[key] || "#000000"}
-                onChange={(event) =>
-                  setAgent((current) => ({...current, [key]: event.target.value}))
-                }
-              />
-              <input
-                value={agent[key] || ""}
-                onChange={(event) =>
-                  setAgent((current) => ({...current, [key]: event.target.value}))
-                }
-              />
-            </span>
-          </label>
-        ))}
+function AgentSection({
+  agent,
+  setAgent,
+  chatPrompts,
+  setChatPrompts,
+  onOpenEmbed,
+  onSaveAgent,
+  onSavePrompts,
+  onUploadAvatar,
+  saving,
+}) {
+  async function handleAvatarFileChange(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    await onUploadAvatar(file);
+    input.value = "";
+  }
+
+  function addPrompt() {
+    setChatPrompts((current) => [...current, createPromptDraft()]);
+  }
+
+  function removePrompt(index) {
+    setChatPrompts((current) =>
+      current.filter((_, promptIndex) => promptIndex !== index)
+    );
+  }
+
+  function togglePrompt(index, active) {
+    setChatPrompts((current) =>
+      current.map((prompt, promptIndex) =>
+        promptIndex === index ? {...prompt, active} : prompt
+      )
+    );
+  }
+
+  return (
+    <section className={styles.agentWorkspace}>
+      <div className={styles.panelHeader}>
+        <div className={styles.titleBlock}>
+          <h1>Agent</h1>
+        </div>
       </div>
 
-      <div className={styles.localizedGrid}>
-        {LANGUAGES.map((language) => (
-          <div key={language.code} className={styles.localePanel}>
-            <h2>{language.label}</h2>
-            <label className={styles.field}>
-              Greeting
-              <input
-                value={localizedValue(agent.greeting, language.code)}
-                onChange={(event) =>
-                  setAgent((current) => ({
-                    ...current,
-                    greeting: setLocalizedValue(
-                      current.greeting,
-                      language.code,
-                      event.target.value
-                    ),
-                  }))
-                }
-              />
-            </label>
-            <label className={styles.field}>
-              Starting message
-              <input
-                value={localizedValue(agent.starting_message, language.code)}
-                onChange={(event) =>
-                  setAgent((current) => ({
-                    ...current,
-                    starting_message: setLocalizedValue(
-                      current.starting_message,
-                      language.code,
-                      event.target.value
-                    ),
-                  }))
-                }
-              />
-            </label>
+      <div className={styles.agentSectionStack}>
+        <section className={`${styles.agentConfigSection} ${styles.agentUtilitySection}`}>
+          <div className={styles.sectionHeader}>
+            <h2>Widget Embed</h2>
+            <button
+              type="button"
+              className={styles.ghostButton}
+              onClick={onOpenEmbed}
+            >
+              <FiCode aria-hidden="true" />
+              Embed
+            </button>
           </div>
-        ))}
+        </section>
+
+        <section className={styles.agentConfigSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Agent Profile</h2>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={onSaveAgent}
+              disabled={saving}
+            >
+              <FiSave aria-hidden="true" />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+
+          <div className={styles.twoColumn}>
+            <div className={styles.form}>
+              <label className={styles.field}>
+                Agent name
+                <input
+                  value={agent.name || ""}
+                  onChange={(event) =>
+                    setAgent((current) => ({...current, name: event.target.value}))
+                  }
+                />
+              </label>
+
+              <label className={styles.field}>
+                Avatar URL
+                <input
+                  value={agent.avatar || ""}
+                  onChange={(event) =>
+                    setAgent((current) => ({...current, avatar: event.target.value}))
+                  }
+                />
+              </label>
+
+              <label className={`${styles.fileDrop} ${styles.avatarUpload}`}>
+                <FiUpload aria-hidden="true" />
+                <span>Upload image or MP4</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4"
+                  disabled={saving}
+                  onChange={handleAvatarFileChange}
+                />
+              </label>
+
+              <div className={styles.avatarGrid}>
+                {AVATAR_OPTIONS.map((avatar) => (
+                  <button
+                    key={avatar}
+                    type="button"
+                    className={`${styles.avatarChoice} ${
+                      agent.avatar === avatar ? styles.avatarChoiceActive : ""
+                    }`}
+                    onClick={() => setAgent((current) => ({...current, avatar}))}
+                    title={avatar.split("/").pop()}
+                  >
+                    <video src={avatar} muted playsInline preload="metadata" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={styles.previewPane}>
+              <div className={styles.agentPreviewHeader}>
+                <div className={styles.agentAvatarPreview}>
+                  {isVideoAvatar(agent.avatar) ? (
+                    <video src={agent.avatar} muted playsInline autoPlay loop />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={agent.avatar} alt="" />
+                  )}
+                </div>
+                <div>
+                  <strong>{agent.name || "Chatbot"}</strong>
+                  <span>Online</span>
+                </div>
+              </div>
+
+              <div
+                className={styles.agentBubble}
+                style={{
+                  background: agent.primary_color || "#6e26f5",
+                  color: "#ffffff",
+                }}
+              >
+                {localizedValue(agent.starting_message, "en") ||
+                  "How can I help today?"}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.agentConfigSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Theme Colors</h2>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={onSaveAgent}
+              disabled={saving}
+            >
+              <FiSave aria-hidden="true" />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+
+          <div className={styles.colorGrid}>
+            {[
+              ["primary_color", "Primary"],
+              ["secondary_color", "Secondary"],
+              ["button_color", "Button"],
+            ].map(([key, label]) => (
+              <label key={key} className={styles.field}>
+                {label}
+                <span className={styles.colorInput}>
+                  <input
+                    type="color"
+                    value={agent[key] || "#000000"}
+                    onChange={(event) =>
+                      setAgent((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))
+                    }
+                  />
+                  <input
+                    value={agent[key] || ""}
+                    onChange={(event) =>
+                      setAgent((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))
+                    }
+                  />
+                </span>
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.agentConfigSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Greetings</h2>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={onSaveAgent}
+              disabled={saving}
+            >
+              <FiSave aria-hidden="true" />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+
+          <div className={styles.localizedGrid}>
+            {LANGUAGES.map((language) => (
+              <div key={language.code} className={styles.localePanel}>
+                <h2>{language.label}</h2>
+                <label className={styles.field}>
+                  Greeting
+                  <input
+                    value={localizedValue(agent.greeting, language.code)}
+                    onChange={(event) =>
+                      setAgent((current) => ({
+                        ...current,
+                        greeting: setLocalizedValue(
+                          current.greeting,
+                          language.code,
+                          event.target.value
+                        ),
+                      }))
+                    }
+                  />
+                </label>
+                <label className={styles.field}>
+                  Starting message
+                  <input
+                    value={localizedValue(agent.starting_message, language.code)}
+                    onChange={(event) =>
+                      setAgent((current) => ({
+                        ...current,
+                        starting_message: setLocalizedValue(
+                          current.starting_message,
+                          language.code,
+                          event.target.value
+                        ),
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.agentConfigSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Chat Prompts</h2>
+            <div className={styles.sectionActions}>
+              <button
+                type="button"
+                className={styles.ghostButton}
+                onClick={addPrompt}
+                disabled={saving}
+              >
+                <FiPlus aria-hidden="true" />
+                Add prompt
+              </button>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={onSavePrompts}
+                disabled={saving}
+              >
+                <FiSave aria-hidden="true" />
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.promptList}>
+            {chatPrompts.length ? (
+              chatPrompts.map((prompt, index) => (
+                <div
+                  className={styles.promptCard}
+                  key={prompt.clientId || prompt.id || index}
+                >
+                  <div className={styles.promptCardHeader}>
+                    <label className={styles.checkboxField}>
+                      <input
+                        type="checkbox"
+                        checked={prompt.active !== false}
+                        onChange={(event) =>
+                          togglePrompt(index, event.target.checked)
+                        }
+                      />
+                      Active
+                    </label>
+                    <button
+                      type="button"
+                      className={styles.iconDangerButton}
+                      aria-label="Remove prompt"
+                      onClick={() => removePrompt(index)}
+                      disabled={saving}
+                    >
+                      <FiX aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  <div className={styles.promptTranslationGrid}>
+                    {LANGUAGES.map((language) => (
+                      <label key={language.code} className={styles.field}>
+                        {language.label}
+                        <textarea
+                          rows="2"
+                          value={promptLocalizedValue(prompt, language.code)}
+                          onChange={(event) =>
+                            setChatPrompts((current) =>
+                              setPromptLocalizedValue(
+                                current,
+                                index,
+                                language.code,
+                                event.target.value
+                              )
+                            )
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className={styles.emptyState}>No chat prompts configured.</div>
+            )}
+          </div>
+        </section>
       </div>
     </section>
   );
 }
 
-function SettingsSection({settings, setSettings, system, setSystem, onSave, saving}) {
+function SettingsSection({
+  namespaceOptions,
+  settings,
+  setSettings,
+  system,
+  setSystem,
+  onSave,
+  saving,
+}) {
+  const isIpInfoConnected =
+    Boolean(system.ipInfoConfigured) && !system.clearIpInfoToken;
+  const showIpInfoTokenField =
+    !system.ipInfoConfigured ||
+    Boolean(system.clearIpInfoToken) ||
+    Boolean(system.ipInfoToken?.trim());
+  const selectedNamespace = String(settings.namespace || "").trim();
+  const namespaceSelectOptions = selectedNamespace
+    ? [
+        selectedNamespace,
+        ...namespaceOptions.filter((namespace) => namespace !== selectedNamespace),
+      ]
+    : namespaceOptions;
+  const namespaceDropdownOptions = [
+    {value: "", label: "All namespaces"},
+    ...namespaceSelectOptions.map((namespace) => ({
+      value: namespace,
+      label: namespace,
+    })),
+  ];
+
   return (
     <section className={styles.panel}>
       <div className={styles.panelHeader}>
@@ -353,32 +915,18 @@ function SettingsSection({settings, setSettings, system, setSystem, onSave, savi
           Model
           <input
             value={settings.model || ""}
-            onChange={(event) =>
-              setSettings((current) => ({...current, model: event.target.value}))
-            }
+            readOnly
+            aria-readonly="true"
           />
         </label>
-        <label className={styles.field}>
-          Namespace
-          <input
-            value={settings.namespace || ""}
-            onChange={(event) =>
-              setSettings((current) => ({...current, namespace: event.target.value}))
-            }
-          />
-        </label>
-        <label className={styles.field}>
-          Response language
-          <input
-            value={settings.response_language || ""}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                response_language: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <SelectField
+          label="Namespace"
+          options={namespaceDropdownOptions}
+          value={settings.namespace || ""}
+          onChange={(namespace) =>
+            setSettings((current) => ({...current, namespace}))
+          }
+        />
         <label className={styles.field}>
           Retrieval K
           <input
@@ -458,56 +1006,55 @@ function SettingsSection({settings, setSettings, system, setSystem, onSave, savi
           <div className={styles.titleBlock}>
             <h2>IPInfo</h2>
             <p>
-              {system.ipInfoConfigured
+              {isIpInfoConnected
                 ? `Token ${system.ipInfoTokenPreview || "configured"}`
                 : "Add a token to enrich conversations with location data."}
             </p>
           </div>
           <span
             className={`${styles.connectionChip} ${
-              system.ipInfoConfigured
+              isIpInfoConnected
                 ? styles.connectionChipConnected
                 : styles.connectionChipDisconnected
             }`}
           >
-            {system.ipInfoConfigured ? "Connected" : "Not connected"}
+            {isIpInfoConnected ? "Connected" : "Not connected"}
           </span>
         </div>
 
         <div className={styles.ipInfoControls}>
-          <label className={`${styles.field} ${styles.ipInfoTokenField}`}>
-            Token
-            <input
-              value={system.ipInfoToken || ""}
-              onChange={(event) =>
+          {showIpInfoTokenField ? (
+            <label className={`${styles.field} ${styles.ipInfoTokenField}`}>
+              Token
+              <input
+                value={system.ipInfoToken || ""}
+                onChange={(event) =>
+                  setSystem((current) => ({
+                    ...current,
+                    ipInfoToken: event.target.value,
+                    clearIpInfoToken: false,
+                  }))
+                }
+                autoComplete="off"
+                placeholder="Optional IPInfo token"
+              />
+            </label>
+          ) : (
+            <button
+              type="button"
+              className={styles.dangerButton}
+              onClick={() =>
                 setSystem((current) => ({
                   ...current,
-                  ipInfoToken: event.target.value,
-                  clearIpInfoToken: false,
+                  clearIpInfoToken: true,
+                  ipInfoToken: "",
                 }))
               }
-              autoComplete="off"
-              placeholder={
-                system.ipInfoConfigured
-                  ? "Paste a new token to replace the current one"
-                  : "Optional IPInfo token"
-              }
-            />
-          </label>
-          <label className={styles.checkboxField}>
-            <input
-              type="checkbox"
-              checked={Boolean(system.clearIpInfoToken)}
-              onChange={(event) =>
-                setSystem((current) => ({
-                  ...current,
-                  clearIpInfoToken: event.target.checked,
-                  ipInfoToken: event.target.checked ? "" : current.ipInfoToken,
-                }))
-              }
-            />
-            Clear stored token
-          </label>
+            >
+              <FiTrash2 aria-hidden="true" />
+              Disconnect
+            </button>
+          )}
         </div>
       </div>
     </section>
@@ -740,21 +1287,14 @@ function ConversationsSection({
       </div>
 
       <div className={styles.filterRow}>
-        <label className={styles.field}>
-          Status
-          <select
-            value={filter.status}
-            onChange={(event) =>
-              setFilter((current) => ({...current, status: event.target.value}))
-            }
-          >
-            {CONVERSATION_STATUSES.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectField
+          label="Status"
+          options={CONVERSATION_STATUSES}
+          value={filter.status}
+          onChange={(status) =>
+            setFilter((current) => ({...current, status}))
+          }
+        />
         <label className={styles.field}>
           Search
           <input
@@ -838,21 +1378,12 @@ function ConversationsSection({
               )}
 
               <div className={styles.formGridCompact}>
-                <label className={styles.field}>
-                  Status
-                  <select
-                    value={statusDraft}
-                    onChange={(event) => setStatusDraft(event.target.value)}
-                  >
-                    {CONVERSATION_STATUSES.filter((status) => status.value).map(
-                      (status) => (
-                        <option key={status.value} value={status.value}>
-                          {status.label}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </label>
+                <SelectField
+                  label="Status"
+                  options={CONVERSATION_STATUSES.filter((status) => status.value)}
+                  value={statusDraft}
+                  onChange={setStatusDraft}
+                />
                 <label className={styles.field}>
                   Notes
                   <textarea
@@ -914,6 +1445,7 @@ function ConversationsSection({
 export default function AdminDashboard({user}) {
   const [activeTab, setActiveTab] = useState("profile");
   const [agent, setAgent] = useState(DEFAULT_AGENT);
+  const [chatPrompts, setChatPrompts] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [system, setSystem] = useState(DEFAULT_SYSTEM);
   const [documents, setDocuments] = useState([]);
@@ -922,6 +1454,18 @@ export default function AdminDashboard({user}) {
   const [conversationFilter, setConversationFilter] = useState({status: "", q: ""});
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
+  const [embedOpen, setEmbedOpen] = useState(false);
+  const namespaceOptions = useMemo(
+    () =>
+      [
+        ...new Set(
+          documents
+            .map((document) => String(document.namespace || "").trim())
+            .filter(Boolean)
+        ),
+      ].sort((left, right) => left.localeCompare(right)),
+    [documents]
+  );
 
   function showToast(type, message) {
     setToast({type, message});
@@ -946,6 +1490,11 @@ export default function AdminDashboard({user}) {
   async function loadAgent() {
     const data = await fetchJson("/api/admin/agent");
     setAgent({...DEFAULT_AGENT, ...(data.agent || {})});
+  }
+
+  async function loadChatPrompts() {
+    const data = await fetchJson("/api/admin/default-questions");
+    setChatPrompts((data.prompts || []).map(createPromptDraft));
   }
 
   async function loadSettings() {
@@ -978,6 +1527,7 @@ export default function AdminDashboard({user}) {
       async () => {
         await Promise.all([
           loadAgent(),
+          loadChatPrompts(),
           loadSettings(),
           loadSystem(),
           loadDocuments(),
@@ -998,7 +1548,7 @@ export default function AdminDashboard({user}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationFilter.status, conversationFilter.q]);
 
-  async function saveAgent() {
+  async function saveAgentProfile() {
     await runTask(async () => {
       const data = await fetchJson("/api/admin/agent", {
         method: "PUT",
@@ -1008,18 +1558,28 @@ export default function AdminDashboard({user}) {
     }, "Agent profile saved.");
   }
 
+  async function saveChatPrompts() {
+    await runTask(async () => {
+      const data = await fetchJson("/api/admin/default-questions", {
+        method: "PUT",
+        body: JSON.stringify({prompts: chatPrompts}),
+      });
+      setChatPrompts((data.prompts || []).map(createPromptDraft));
+    }, "Chat prompts saved.");
+  }
+
   async function saveSettings() {
     await runTask(async () => {
       const data = await fetchJson("/api/admin/settings", {
         method: "PUT",
-        body: JSON.stringify(settings),
+        body: JSON.stringify({...settings, response_language: ""}),
       });
       const systemPayload = {};
 
-      if (system.clearIpInfoToken) {
-        systemPayload.clearIpInfoToken = true;
-      } else if (system.ipInfoToken?.trim()) {
+      if (system.ipInfoToken?.trim()) {
         systemPayload.ipInfoToken = system.ipInfoToken;
+      } else if (system.clearIpInfoToken) {
+        systemPayload.clearIpInfoToken = true;
       }
 
       const systemData = Object.keys(systemPayload).length
@@ -1029,7 +1589,11 @@ export default function AdminDashboard({user}) {
           })
         : {integrations: system};
 
-      setSettings({...DEFAULT_SETTINGS, ...(data.settings || {})});
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...(data.settings || {}),
+        response_language: "",
+      });
       setSystem({...DEFAULT_SYSTEM, ...(systemData.integrations || {})});
     }, "Settings saved.");
   }
@@ -1042,6 +1606,18 @@ export default function AdminDashboard({user}) {
       await fetchJson("/api/embed/pdf", {method: "POST", body: formData});
       await loadDocuments();
     }, "Document indexed.");
+  }
+
+  async function uploadAvatar(file) {
+    await runTask(async () => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const data = await fetchJson("/api/admin/avatar", {
+        method: "POST",
+        body: formData,
+      });
+      setAgent((current) => ({...current, avatar: data.url || current.avatar}));
+    }, "Avatar uploaded. Save profile to publish it.");
   }
 
   async function ragWebsite({crawl, maxPages, namespace, replace, url}) {
@@ -1114,13 +1690,15 @@ export default function AdminDashboard({user}) {
             </span>
             <h1>Manage Agent</h1>
           </div>
-          <div
-            className={`${styles.statusPill} ${adminStatus.className}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span className={styles.statusDot} aria-hidden="true" />
-            {adminStatus.label}
+          <div className={styles.topActions}>
+            <div
+              className={`${styles.statusPill} ${adminStatus.className}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className={styles.statusDot} aria-hidden="true" />
+              {adminStatus.label}
+            </div>
           </div>
         </div>
 
@@ -1128,13 +1706,19 @@ export default function AdminDashboard({user}) {
           <AgentSection
             agent={agent}
             setAgent={setAgent}
-            onSave={saveAgent}
+            chatPrompts={chatPrompts}
+            setChatPrompts={setChatPrompts}
+            onOpenEmbed={() => setEmbedOpen(true)}
+            onSaveAgent={saveAgentProfile}
+            onSavePrompts={saveChatPrompts}
+            onUploadAvatar={uploadAvatar}
             saving={busy}
           />
         ) : null}
 
         {activeTab === "settings" ? (
           <SettingsSection
+            namespaceOptions={namespaceOptions}
             settings={settings}
             setSettings={setSettings}
             system={system}
@@ -1169,6 +1753,13 @@ export default function AdminDashboard({user}) {
         ) : null}
       </main>
 
+      {embedOpen ? (
+        <EmbedModal
+          agent={agent}
+          onClose={() => setEmbedOpen(false)}
+          onToast={showToast}
+        />
+      ) : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

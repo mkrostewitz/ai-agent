@@ -9,6 +9,7 @@ import {MongoClient} from "mongodb";
 
 import buildIds from "../helpers/buildIds.js";
 import normalizeText from "../helpers/normalizeText.js";
+import {getOllamaRequestOptions} from "./ollamaRuntime.js";
 
 export const DEFAULT_WEB_CHUNK_SIZE = 500;
 export const DEFAULT_WEB_CHUNK_OVERLAP = 80;
@@ -536,6 +537,7 @@ export async function indexWebsiteUrls(input = {}) {
     const embeddings = new OllamaEmbeddings({
       baseUrl: OLLAMA_BASE_URL || "http://localhost:11434",
       model: "nomic-embed-text",
+      requestOptions: getOllamaRequestOptions(),
     });
     const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
       collection,
