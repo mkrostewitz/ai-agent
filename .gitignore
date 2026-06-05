@@ -19,6 +19,11 @@
 # misc
 .DS_Store
 *.pem
+/public/uploads/*
+!/public/uploads/avatars/
+!/public/uploads/avatars/.gitkeep
+/storage/uploads/*
+!/storage/uploads/.gitkeep
 
 # debug
 npm-debug.log*
@@ -28,6 +33,8 @@ yarn-error.log*
 # local env files
 .env*
 .env.docker
+!.env.example
+!.env.production.example
 
 # vercel
 .vercel
