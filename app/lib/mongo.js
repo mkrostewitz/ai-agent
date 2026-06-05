@@ -56,9 +56,9 @@ export function hasMongoConfig() {
   );
 }
 
-export function createMongoClient() {
+export function createMongoClient(options = {}) {
   try {
-    return new MongoClient(getMongoUri());
+    return new MongoClient(getMongoUri(), options);
   } catch (error) {
     throw normalizeMongoError(error);
   }
