@@ -5,6 +5,8 @@ services:
     image: node:20-alpine
     working_dir: /app
     command: sh -c "npm install && npm run dev"
+    environment:
+      OLLAMA_NUM_THREAD: "4"
     ports:
       - "3030:3030"
     volumes:
@@ -20,7 +22,7 @@ services:
     env_file:
       - .env.docker
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
@@ -33,11 +35,12 @@ services:
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "30m"
+      OLLAMA_NUM_THREAD: "4"
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "2"
       OLLAMA_MAX_QUEUE: "32"
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
       - ./entrypoint-ollama.sh:/entrypoint.sh
@@ -45,4 +48,6 @@ services:
 
 volumes:
   mongo_data:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_mongo_data"
   ollama_data:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_ollama_data"

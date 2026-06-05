@@ -1,0 +1,23 @@
+services:
+  web:
+    environment:
+      # DigitalOcean's entry RTX 4000 Ada GPU Droplet has 8 vCPU.
+      # This affects the Ollama API request option sent by the app.
+      OLLAMA_NUM_THREAD: "8"
+
+  ollama:
+    environment:
+      OLLAMA_KEEP_ALIVE: "1h"
+      OLLAMA_NUM_THREAD: "8"
+      OLLAMA_NUM_PARALLEL: "2"
+      OLLAMA_MAX_LOADED_MODELS: "2"
+      OLLAMA_MAX_QUEUE: "64"
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_MODELS_TO_PULL: "phi3:mini nomic-embed-text llama3.1:8b"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

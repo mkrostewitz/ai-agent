@@ -5,10 +5,15 @@ services:
     build: .
     container_name: ai-agent-web
     restart: unless-stopped
+    environment:
+      OLLAMA_NUM_THREAD: "4"
     ports:
       - "3030:3030"
     env_file:
       - .env.docker
+    volumes:
+      - app_public_uploads:/app/public/uploads
+      - app_private_uploads:/app/storage/uploads
     depends_on:
       - mongo
       - ollama
@@ -20,7 +25,7 @@ services:
     env_file:
       - .env.docker
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
@@ -33,15 +38,22 @@ services:
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "30m"
+      OLLAMA_NUM_THREAD: "4"
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "2"
       OLLAMA_MAX_QUEUE: "32"
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
       - ./entrypoint-ollama.sh:/entrypoint.sh
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
 volumes:
+  app_private_uploads:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_app_private_uploads"
+  app_public_uploads:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_app_public_uploads"
   mongo_data:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_mongo_data"
   ollama_data:
+    name: "${COMPOSE_PROJECT_NAME:-ai-agent}_ollama_data"
