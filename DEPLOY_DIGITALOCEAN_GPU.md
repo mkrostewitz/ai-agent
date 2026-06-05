@@ -89,6 +89,16 @@ OLLAMA_BASE_URL="http://ollama:11434"
 OLLAMA_HOST="http://ollama:11434"
 ```
 
+For conversation notification emails, keep a stable encryption key in
+`.env.docker`, then configure Apple/iCloud, Gmail, Microsoft, or custom SMTP in
+the `/admin` Settings tab. The SMTP password is encrypted before it is stored in
+MongoDB.
+
+```env
+APP_ENCRYPTION_KEY="CHANGE_ME_LONG_RANDOM_SECRET"
+APP_BASE_URL="https://your-agent-domain.com"
+```
+
 Start the GPU stack:
 
 ```bash
