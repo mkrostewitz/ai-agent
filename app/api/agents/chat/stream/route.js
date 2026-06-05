@@ -7,6 +7,10 @@ import {
   getMongoDbName,
   hasMongoConfig,
 } from "@/app/lib/mongo";
+import {
+  knowledgeNamespaceMatch,
+  vectorNamespaceFilter,
+} from "@/app/lib/knowledgeNamespace";
 import {getOllamaRequestOptions} from "@/app/lib/ollamaRuntime";
 import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
@@ -313,6 +317,133 @@ function cosineSimilarity(a = [], b = []) {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+function safeRetrievalK(question, retrievalK) {
+  const requestedK =
+    Number.isFinite(retrievalK) && retrievalK > 0
+      ? Math.min(Math.floor(retrievalK), 20)
+      : DEFAULT_RETRIEVAL_K;
+
+  return isProfessionalBackgroundQuestion(question)
+    ? Math.min(Math.max(requestedK, 12), 20)
+    : requestedK;
+}
+
+function metadataObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function metadataString(metadata, key) {
+  const root = metadataObject(metadata);
+  const nested = metadataObject(root.metadata);
+  const value = root[key] ?? nested[key];
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function mapContextDocument(doc) {
+  const text = typeof doc?.pageContent === "string" ? doc.pageContent.trim() : "";
+  const metadata = doc?.metadata || {};
+
+  return {
+    text,
+    source: metadataString(metadata, "source"),
+    sourceType: metadataString(metadata, "sourceType"),
+    title: metadataString(metadata, "title"),
+  };
+}
+
+async function retrieveContextWithLocalCosine(
+  collection,
+  question,
+  namespace,
+  retrievalK,
+  reason
+) {
+  try {
+    const safeK = safeRetrievalK(question, retrievalK);
+    const query = namespace ? knowledgeNamespaceMatch(namespace) : {};
+    const candidates = await collection
+      .find(query, {
+        projection: {
+          text: 1,
+          source: 1,
+          sourceType: 1,
+          title: 1,
+          embedding: 1,
+          "metadata.source": 1,
+          "metadata.sourceType": 1,
+          "metadata.title": 1,
+        },
+      })
+      .limit(2000)
+      .toArray();
+
+    const fallbackEmbeddings = new OllamaEmbeddings({
+      model: "nomic-embed-text",
+      baseUrl: OLLAMA_BASE_URL,
+      requestOptions: getOllamaRequestOptions(),
+    });
+    const queryEmbedding = await fallbackEmbeddings.embedQuery(question);
+    const boostProfessionalRecency = isProfessionalBackgroundQuestion(question);
+    const ranked = candidates
+      .map((doc) => {
+        const text = typeof doc?.text === "string" ? doc.text.trim() : "";
+        const source =
+          typeof doc?.source === "string" && doc.source.trim()
+            ? doc.source.trim()
+            : metadataString(doc?.metadata, "source");
+        const sourceType =
+          typeof doc?.sourceType === "string" && doc.sourceType.trim()
+            ? doc.sourceType.trim()
+            : metadataString(doc?.metadata, "sourceType");
+        const title =
+          typeof doc?.title === "string" && doc.title.trim()
+            ? doc.title.trim()
+            : metadataString(doc?.metadata, "title");
+        const semanticScore = cosineSimilarity(queryEmbedding, doc?.embedding);
+        const score =
+          semanticScore +
+          (boostProfessionalRecency
+            ? recencyScore(`${title || ""}\n${source || ""}\n${text}`) / 100000
+            : 0);
+
+        return {
+          score,
+          source,
+          sourceType,
+          text,
+          title,
+        };
+      })
+      .filter((item) => item.text && Number.isFinite(item.score) && item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, safeK)
+      .map(({text, source, sourceType, title}) => ({
+        text,
+        source,
+        sourceType,
+        title,
+      }));
+
+    console.log("[rag] retrieval-local", {
+      namespace: namespace || null,
+      reason,
+      k: safeK,
+      candidates: candidates.length,
+      hits: ranked.length,
+    });
+
+    return ranked;
+  } catch (error) {
+    console.warn("Chat stream: local retrieval fallback failed", {
+      message: error?.message || String(error),
+      namespace: namespace || null,
+      reason,
+    });
+    return [];
+  }
+}
+
 async function loadRuntimeConfig() {
   let client;
   try {
@@ -364,6 +495,7 @@ async function loadRuntimeConfig() {
 
 async function retrieveContext(question, namespace, retrievalK) {
   let client;
+  let collection;
   try {
     if (!hasMongoConfig()) return [];
 
@@ -372,7 +504,7 @@ async function retrieveContext(question, namespace, retrievalK) {
     console.log("[mongo] Connected: /api/agents/chat/stream (embeddings)");
 
     const db = client.db(getMongoDbName());
-    const collection = db.collection(EMBEDDINGS_COLLECTION);
+    collection = db.collection(EMBEDDINGS_COLLECTION);
     const embeddings = new OllamaEmbeddings({
       model: "nomic-embed-text",
       baseUrl: OLLAMA_BASE_URL,
@@ -385,159 +517,45 @@ async function retrieveContext(question, namespace, retrievalK) {
       embeddingKey: "embedding",
     });
 
-    const requestedK =
-      Number.isFinite(retrievalK) && retrievalK > 0
-        ? Math.min(Math.floor(retrievalK), 20)
-        : DEFAULT_RETRIEVAL_K;
-    const safeK = isProfessionalBackgroundQuestion(question)
-      ? Math.min(Math.max(requestedK, 12), 20)
-      : requestedK;
-    // Support both shapes:
-    // 1) documents with top-level `namespace`
-    // 2) documents with nested `metadata.namespace`
-    const filter = namespace
-      ? {
-          $or: [{namespace}, {"metadata.namespace": namespace}],
-        }
-      : undefined;
+    const safeK = safeRetrievalK(question, retrievalK);
+    const filter = vectorNamespaceFilter(namespace);
     const docs = await vectorStore.similaritySearch(question, safeK, filter);
+    const contexts = docs.map(mapContextDocument).filter((d) => d.text);
     console.log("[rag] retrieval", {
       namespace: namespace || null,
       k: safeK,
-      hits: Array.isArray(docs) ? docs.length : 0,
+      hits: contexts.length,
     });
 
-    return docs
-      .map((doc) => ({
-        text:
-          typeof doc?.pageContent === "string" ? doc.pageContent.trim() : "",
-        source:
-          typeof doc?.metadata?.source === "string"
-            ? doc.metadata.source
-            : null,
-        sourceType:
-          typeof doc?.metadata?.sourceType === "string"
-            ? doc.metadata.sourceType
-            : null,
-        title:
-          typeof doc?.metadata?.title === "string" ? doc.metadata.title : null,
-      }))
-      .filter((d) => d.text);
-  } catch (error) {
-    const isSearchNotEnabled =
-      error?.code === 31082 || error?.codeName === "SearchNotEnabled";
-    if (isSearchNotEnabled) {
-      console.warn(
-        "Chat stream: Atlas vector search unavailable, using local cosine fallback"
+    if (namespace && contexts.length === 0) {
+      return retrieveContextWithLocalCosine(
+        collection,
+        question,
+        namespace,
+        retrievalK,
+        "empty-vector-namespace"
       );
-      let fallbackClient;
-      try {
-        if (!hasMongoConfig()) return [];
-        fallbackClient = createMongoClient();
-        await fallbackClient.connect();
-        console.log("[mongo] Connected: /api/agents/chat/stream (embeddings-fallback)");
-        const db = fallbackClient.db(getMongoDbName());
-        const collection = db.collection(EMBEDDINGS_COLLECTION);
-
-        const requestedK =
-          Number.isFinite(retrievalK) && retrievalK > 0
-            ? Math.min(Math.floor(retrievalK), 20)
-            : DEFAULT_RETRIEVAL_K;
-        const safeK = isProfessionalBackgroundQuestion(question)
-          ? Math.min(Math.max(requestedK, 12), 20)
-          : requestedK;
-        const query = namespace
-          ? {
-              $or: [{namespace}, {"metadata.namespace": namespace}],
-            }
-          : {};
-
-        const candidates = await collection
-          .find(query, {
-            projection: {
-              text: 1,
-              source: 1,
-              embedding: 1,
-              "metadata.source": 1,
-              "metadata.sourceType": 1,
-              "metadata.title": 1,
-            },
-          })
-          .limit(2000)
-          .toArray();
-
-        const fallbackEmbeddings = new OllamaEmbeddings({
-          model: "nomic-embed-text",
-          baseUrl: OLLAMA_BASE_URL,
-          requestOptions: getOllamaRequestOptions(),
-        });
-        const queryEmbedding = await fallbackEmbeddings.embedQuery(question);
-        const boostProfessionalRecency =
-          isProfessionalBackgroundQuestion(question);
-        const ranked = candidates
-          .map((doc) => {
-            const text = typeof doc?.text === "string" ? doc.text.trim() : "";
-            const source =
-              typeof doc?.source === "string"
-                ? doc.source
-                : typeof doc?.metadata?.source === "string"
-                ? doc.metadata.source
-                : null;
-            const sourceType =
-              typeof doc?.metadata?.sourceType === "string"
-                ? doc.metadata.sourceType
-                : null;
-            const title =
-              typeof doc?.metadata?.title === "string"
-                ? doc.metadata.title
-                : null;
-            const semanticScore = cosineSimilarity(
-              queryEmbedding,
-              doc?.embedding
-            );
-            const score =
-              semanticScore +
-              (boostProfessionalRecency
-                ? recencyScore(`${title || ""}\n${source || ""}\n${text}`) /
-                  100000
-                : 0);
-
-            return {
-              score,
-              source,
-              sourceType,
-              text,
-              title,
-            };
-          })
-          .filter((item) => item.text && Number.isFinite(item.score) && item.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, safeK)
-          .map(({text, source, sourceType, title}) => ({
-            text,
-            source,
-            sourceType,
-            title,
-          }));
-
-        console.log("[rag] retrieval-fallback", {
-          namespace: namespace || null,
-          k: safeK,
-          candidates: candidates.length,
-          hits: ranked.length,
-        });
-
-        return ranked;
-      } catch (fallbackError) {
-        console.warn("Chat stream: retrieval fallback failed", {
-          message: fallbackError?.message || String(fallbackError),
-          namespace: namespace || null,
-        });
-        return [];
-      } finally {
-        if (fallbackClient) await fallbackClient.close();
-      }
     }
+
+    return contexts;
+  } catch (error) {
+    if (collection) {
+      console.warn(
+        "Chat stream: Atlas vector search failed, using local cosine fallback",
+        {
+          message: error?.message || String(error),
+          namespace: namespace || null,
+        }
+      );
+      return retrieveContextWithLocalCosine(
+        collection,
+        question,
+        namespace,
+        retrievalK,
+        "vector-search-error"
+      );
+    }
+
     console.warn("Chat stream: retrieval failed", {
       message: error?.message || String(error),
       namespace: namespace || null,

@@ -8,6 +8,7 @@ import {Document} from "langchain/document";
 
 import buildIds from "../helpers/buildIds.js";
 import normalizeText from "../helpers/normalizeText.js";
+import {cleanKnowledgeNamespace, knowledgeNamespaceMatch} from "./knowledgeNamespace.js";
 import {
   createMongoClient,
   getMongoDbName,
@@ -485,7 +486,7 @@ async function deleteExistingSources(collection, namespace, urls, canonicalOrigi
     const sourcePattern = new RegExp(`^${hostPattern}`);
     const result = await collection.deleteMany({
       $and: [
-        {$or: [{namespace}, {"metadata.namespace": namespace}]},
+        knowledgeNamespaceMatch(namespace),
         {$or: [{source: sourcePattern}, {"metadata.source": sourcePattern}]},
       ],
     });
@@ -506,7 +507,7 @@ export async function indexWebsiteUrls(input = {}) {
     throw new Error("Provide at least one valid URL.");
   }
 
-  const namespace = String(input.namespace || "website").trim() || "website";
+  const namespace = cleanKnowledgeNamespace(input.namespace, "website");
   const crawl = Boolean(input.crawl);
   const includeKnownApis = input.includeKnownApis ?? crawl;
   const canonicalOrigin = input.canonicalOrigin
@@ -616,6 +617,7 @@ export async function indexWebsiteUrls(input = {}) {
     for (const baseDoc of baseDocuments) {
       const source = baseDoc.metadata.source;
       const splits = await splitter.splitDocuments([baseDoc]);
+      const indexedAt = new Date();
       const ids = buildIds(splits.length, sourceIdPrefix(namespace, source));
       const docsWithMeta = splits.map(
         (doc, index) =>
@@ -623,7 +625,9 @@ export async function indexWebsiteUrls(input = {}) {
             pageContent: doc.pageContent,
             metadata: {
               ...doc.metadata,
+              createdAt: indexedAt,
               id: ids[index],
+              indexedAt,
               namespace,
               source,
             },

@@ -9,6 +9,7 @@ import normalizeText from "@/app/helpers/normalizeText";
 import buildIds from "@/app/helpers/buildIds";
 import {requireAdminApi} from "@/app/lib/adminAuth";
 import {storeBuffer} from "@/app/lib/fileStorage";
+import {cleanKnowledgeNamespace} from "@/app/lib/knowledgeNamespace";
 import {
   createMongoClient,
   getMongoDbName,
@@ -82,7 +83,7 @@ export async function POST(req) {
       );
     }
 
-    const namespace = parsedSettings.data.namespace;
+    const namespace = cleanKnowledgeNamespace(parsedSettings.data.namespace);
     const chunkSize = DEFAULT_CHUNK_SIZE;
     const chunkOverlap = DEFAULT_CHUNK_OVERLAP;
 
@@ -129,16 +130,16 @@ export async function POST(req) {
     const results = [];
     let totalAdded = 0;
 
-    const sourceEntries = uploads.map((u) => ({
+    const sourceEntries = parsedSettings.data.uploads.map((u) => ({
       kind: "buffer",
       buffer: u.buffer,
       contentType: u.contentType || "application/pdf",
       name: u.name,
-      namespace: u.namespace || namespace,
+      namespace: cleanKnowledgeNamespace(u.namespace, namespace),
     }));
 
     for (const entry of sourceEntries) {
-      const ns = entry.namespace || namespace;
+      const ns = cleanKnowledgeNamespace(entry.namespace, namespace);
 
       try {
         let docs = [];
@@ -176,6 +177,7 @@ export async function POST(req) {
           storageVisibility: storedFile.visibility,
         };
 
+        const indexedAt = new Date();
         const ids = buildIds(splits.length, ns);
         const docsWithSource = splits.map(
           (doc, idx) =>
@@ -183,6 +185,8 @@ export async function POST(req) {
               pageContent: doc.pageContent,
               metadata: {
                 ...doc.metadata,
+                createdAt: indexedAt,
+                indexedAt,
                 source: entry.name,
                 namespace: ns,
                 id: ids[idx],

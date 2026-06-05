@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 
 import {requireAdminApi} from "@/app/lib/adminAuth";
 import {deleteStoredObject} from "@/app/lib/fileStorage";
+import {knowledgeNamespaceMatch} from "@/app/lib/knowledgeNamespace";
 import {getDb} from "@/app/lib/mongo";
 
 export const runtime = "nodejs";
@@ -42,9 +43,23 @@ export async function GET(request) {
               },
             },
             chunks: {$sum: 1},
-            firstIndexedAt: {$min: {$ifNull: ["$createdAt", "$metadata.indexedAt"]}},
-            lastIndexedAt: {$max: {$ifNull: ["$createdAt", "$metadata.indexedAt"]}},
-            title: {$first: "$metadata.title"},
+            firstIndexedAt: {
+              $min: {
+                $ifNull: [
+                  "$createdAt",
+                  {$ifNull: ["$indexedAt", "$metadata.indexedAt"]},
+                ],
+              },
+            },
+            lastIndexedAt: {
+              $max: {
+                $ifNull: [
+                  "$createdAt",
+                  {$ifNull: ["$indexedAt", "$metadata.indexedAt"]},
+                ],
+              },
+            },
+            title: {$first: {$ifNull: ["$metadata.title", "$title"]}},
           },
         },
         {$sort: {"_id.namespace": 1, "_id.source": 1}},
@@ -96,7 +111,7 @@ export async function DELETE(request) {
     const db = await getDb();
     const match = {
       $and: [
-        {$or: [{namespace}, {"metadata.namespace": namespace}]},
+        knowledgeNamespaceMatch(namespace),
         {$or: [{source}, {"metadata.source": source}]},
       ],
     };
