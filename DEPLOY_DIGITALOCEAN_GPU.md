@@ -55,7 +55,7 @@ If Docker is missing because you chose the AI/ML Ready image, install Docker
 Engine from Docker's official instructions, then verify GPU access from Docker:
 
 ```bash
-docker run --rm --gpus all ubuntu nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 If Docker is installed but the GPU test fails, configure the NVIDIA runtime and
@@ -64,7 +64,7 @@ restart Docker:
 ```bash
 nvidia-ctk runtime configure --runtime=docker
 systemctl restart docker
-docker run --rm --gpus all ubuntu nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 Clone the repo:
