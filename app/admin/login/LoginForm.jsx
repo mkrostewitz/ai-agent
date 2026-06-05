@@ -54,8 +54,8 @@ export default function LoginForm() {
         <h1>Agent sign in</h1>
       </div>
 
-      <form className={styles.form} onSubmit={submitLogin}>
-        <label className={styles.field}>
+      <form className={`${styles.form} ${styles.loginForm}`} onSubmit={submitLogin}>
+        <label className={`${styles.field} ${styles.loginField}`}>
           Email
           <input
             type="email"
@@ -66,7 +66,7 @@ export default function LoginForm() {
           />
         </label>
 
-        <label className={styles.field}>
+        <label className={`${styles.field} ${styles.loginField}`}>
           Password
           <input
             type="password"
@@ -79,7 +79,10 @@ export default function LoginForm() {
 
         {error ? <div className={styles.errorBox}>{error}</div> : null}
 
-        <button className={styles.primaryButton} disabled={isSubmitting}>
+        <button
+          className={`${styles.primaryButton} ${styles.loginButton}`}
+          disabled={isSubmitting}
+        >
           <FiLogIn aria-hidden="true" />
           {isSubmitting ? "Signing in..." : "Sign in"}
         </button>

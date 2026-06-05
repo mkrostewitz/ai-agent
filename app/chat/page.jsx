@@ -8,6 +8,128 @@ import {motion, AnimatePresence} from "framer-motion";
 import {FiSend, FiUser, FiCpu} from "react-icons/fi";
 import {useI18n} from "../i18n/useI18n";
 
+const DEFAULT_AGENT = {
+  name: "Chatbot",
+  avatar: "/avatars/Michael_Intro.mp4",
+  starting_message: [
+    {lang: "en", text: "How can I help today?"},
+    {lang: "de", text: "Wie kann ich heute helfen?"},
+  ],
+};
+
+function normalizeLocale(lang, fallbackLocale = "en") {
+  return String(lang || fallbackLocale || "en")
+    .slice(0, 2)
+    .toLowerCase();
+}
+
+function pickLocalizedText(value, lang, fallbackLocale = "en") {
+  const locale = normalizeLocale(lang, fallbackLocale);
+  const fallback = normalizeLocale(fallbackLocale);
+
+  if (Array.isArray(value)) {
+    const hit =
+      value.find(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          (item.language || item.lang) &&
+          normalizeLocale(item.language || item.lang) === locale,
+      ) ||
+      value.find(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          (item.language || item.lang) &&
+          normalizeLocale(item.language || item.lang) === fallback,
+      );
+    return typeof hit?.text === "string" ? hit.text.trim() : null;
+  }
+
+  if (value && typeof value === "object") {
+    const fromLang =
+      value[locale] ||
+      value[lang] ||
+      value[fallback] ||
+      value.en ||
+      value.default;
+    if (typeof fromLang === "string") return fromLang.trim();
+    if (fromLang && typeof fromLang.text === "string") {
+      return fromLang.text.trim();
+    }
+  }
+
+  if (typeof value === "string") return value.trim();
+  return null;
+}
+
+function buildIntroContent(agent, lang, fallbackLocale) {
+  const intro =
+    pickLocalizedText(agent?.starting_message, lang, fallbackLocale) ||
+    pickLocalizedText(agent?.greeting, lang, fallbackLocale) ||
+    pickLocalizedText(DEFAULT_AGENT.starting_message, lang, fallbackLocale) ||
+    "How can I help today?";
+
+  return intro
+    .replace(/\{\{\s*first_name\s*\}\}/gi, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function createIntroMessage(agent, lang, fallbackLocale) {
+  return {
+    type: "ai",
+    content: buildIntroContent(agent, lang, fallbackLocale),
+    isIntro: true,
+  };
+}
+
+function isVideoAvatar(src) {
+  const value = String(src || "").trim();
+  if (!value) return false;
+  if (/^data:video\//i.test(value) || /^blob:/i.test(value)) return true;
+  return /\.(mp4|webm|ogg|mov)([?#].*)?$/i.test(value);
+}
+
+function AgentAvatar({agent}) {
+  const [failed, setFailed] = useState(false);
+  const avatar = agent?.avatar || DEFAULT_AGENT.avatar;
+  const label = `${agent?.name || DEFAULT_AGENT.name} avatar`;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [avatar]);
+
+  if (failed || !avatar) {
+    return <FiCpu className="text-xl" />;
+  }
+
+  if (isVideoAvatar(avatar)) {
+    return (
+      <video
+        src={avatar}
+        aria-label={label}
+        className="h-8 w-8 rounded-full object-cover bg-gray-700 sm:h-9 sm:w-9"
+        muted
+        autoPlay
+        loop
+        playsInline
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={avatar}
+      alt={label}
+      className="h-8 w-8 rounded-full object-cover bg-gray-700 sm:h-9 sm:w-9"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 // Markdown component to render formatted text
 const Markdown = ({content}) => {
   // Normalize spacing and recover list/line breaks for better Markdown rendering
@@ -29,7 +151,7 @@ const Markdown = ({content}) => {
 
   return (
     <ReactMarkdown
-      className="prose mt-1 w-full break-words prose-p:leading-relaxed py-3 px-3 mark-down"
+      className="prose mt-1 w-full break-words px-1 py-1 prose-p:leading-relaxed mark-down sm:px-3 sm:py-3"
       remarkPlugins={[remarkGfm]}
       components={{
         a: ({node, ...props}) => (
@@ -83,14 +205,17 @@ const Markdown = ({content}) => {
 // Main ChatStream component
 const ChatStream = () => {
   // State variables for managing chat
+  const {t, lang, fallbackLocale} = useI18n();
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => [
+    createIntroMessage(DEFAULT_AGENT, lang, fallbackLocale),
+  ]);
   const [chatStarted, setChatStarted] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [defaultOptions, setDefaultOptions] = useState([]);
   const [isLoadingDefaults, setIsLoadingDefaults] = useState(true);
-  const {t, i18n, lang, supportedLocales, fallbackLocale} = useI18n();
+  const [agent, setAgent] = useState(DEFAULT_AGENT);
   const typingQueueRef = useRef([]);
   const chatContainerRef = useRef(null);
 
@@ -101,6 +226,62 @@ const ChatStream = () => {
         chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadAgent() {
+      try {
+        const res = await fetch("/api/agents/details", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const chatbot = data?.data?.chatbot || {};
+        setAgent((current) => ({
+          ...current,
+          name:
+            chatbot.name ||
+            data?.data?.agent?.name ||
+            current.name ||
+            DEFAULT_AGENT.name,
+          avatar: chatbot.avatar || current.avatar || DEFAULT_AGENT.avatar,
+          greeting: chatbot.greeting || current.greeting,
+          starting_message:
+            chatbot.starting_message ||
+            current.starting_message ||
+            DEFAULT_AGENT.starting_message,
+        }));
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.warn("Failed to load chat agent profile:", error);
+        }
+      }
+    }
+
+    loadAgent();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const introMessage = createIntroMessage(agent, lang, fallbackLocale);
+
+    setMessages((prev) => {
+      if (prev.some((message) => message.type === "user")) return prev;
+
+      const containsOnlyIntro =
+        prev.length === 0 || prev.every((message) => message.isIntro);
+      if (!containsOnlyIntro) return prev;
+
+      if (prev.length === 1 && prev[0].content === introMessage.content) {
+        return prev;
+      }
+
+      return [introMessage];
+    });
+  }, [agent, lang, fallbackLocale]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -304,7 +485,7 @@ const ChatStream = () => {
         {/* Chat messages container */}
         <div
           ref={chatContainerRef}
-          className="flex-grow p-6 overflow-y-auto space-y-6 custom-scrollbar"
+          className="flex-grow space-y-5 overflow-y-auto px-3 py-4 custom-scrollbar sm:space-y-6 sm:p-6"
         >
           <AnimatePresence>
             {/* Map through messages and display them */}
@@ -326,20 +507,20 @@ const ChatStream = () => {
                 >
                   <motion.div
                     whileHover={{scale: 1.02}}
-                    className={`max-w-[80%] rounded-2xl shadow-lg ${
+                    className={`max-w-[94%] rounded-2xl shadow-lg sm:max-w-[80%] ${
                       message.type === "user"
-                        ? "bg-indigo-600 p-4"
-                        : "bg-gray-800 p-4"
-                    } flex items-center`}
+                        ? "bg-indigo-600 p-3 sm:p-4"
+                        : "bg-gray-800 p-3 sm:p-4"
+                    } flex items-start`}
                   >
-                    <div className="mr-3 mt-1">
+                    <div className="mr-2 mt-1 flex h-8 w-8 shrink-0 items-center justify-center sm:mr-3 sm:h-9 sm:w-9">
                       {message.type === "user" ? (
                         <FiUser className="text-xl" />
                       ) : (
-                        <FiCpu className="text-xl" />
+                        <AgentAvatar agent={agent} />
                       )}
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       {message.type === "user" ? (
                         <p className="text-sm whitespace-pre-wrap">
                           {message.content}
@@ -361,11 +542,11 @@ const ChatStream = () => {
           initial={{y: 50, opacity: 0}}
           animate={{y: 0, opacity: 1}}
           transition={{duration: 0.5}}
-          className="p-6 bg-gray-900 rounded-t-3xl shadow-lg"
+          className="rounded-t-3xl bg-gray-900 p-3 shadow-lg sm:p-6"
         >
           {/* Display default options if chat hasn't started */}
           {!chatStarted && (
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {isLoadingDefaults ? (
                 <div className="col-span-2 text-center text-sm text-gray-400">
                   {t("chat.loadingSuggestions")}
@@ -386,20 +567,19 @@ const ChatStream = () => {
             </div>
           )}
           {/* Chat input form */}
-          <form onSubmit={handleSubmit} className="flex items-center">
+          <form onSubmit={handleSubmit} className="flex items-stretch">
             <motion.input
-              whileFocus={{scale: 1.02}}
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder={t("chat.placeholder")}
-              className="flex-grow p-4 rounded-l-xl bg-gray-800 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-700 shadow-inner"
+              className="h-14 min-w-0 flex-grow rounded-l-xl border border-gray-700 bg-gray-800 px-4 text-gray-100 shadow-inner focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
             <motion.button
               whileHover={{scale: 1.05}}
               whileTap={{scale: 0.95}}
               type="submit"
-              className="p-4 rounded-r-xl bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors shadow-md"
+              className="flex h-14 w-16 shrink-0 items-center justify-center rounded-r-xl border border-indigo-600 bg-indigo-600 shadow-md transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <FiSend className="text-xl" />
             </motion.button>
