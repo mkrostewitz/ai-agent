@@ -53,6 +53,7 @@
     typing: false,
     hasStarted: false,
     introInProgress: false,
+    promptOptions: [],
     user: {
       first_name: "",
       last_name: "",
@@ -262,7 +263,7 @@
   }
   async function loadExternalTranslations(lang) {
     try {
-      const res = await fetch(`/locales/${lang}/translation.json`);
+      const res = await fetch(host + `/locales/${lang}/translation.json`);
       if (!res.ok) throw new Error("translations fetch failed");
       const json = await res.json();
       // Accept either top-level ChatWidget or nested under pages.ChatWidget
@@ -333,11 +334,25 @@
     return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(trimmed);
   }
 
+  function resolveWidgetAssetUrl(src, fallback) {
+    const trimmed = (src || "").trim();
+    const fallbackUrl = fallback || host + "/avatars/Michael_Intro.mp4";
+    if (!trimmed) return fallbackUrl;
+    if (/^(data|blob):/i.test(trimmed)) return trimmed;
+
+    try {
+      return new URL(trimmed, host + "/").href;
+    } catch (e) {
+      return fallbackUrl;
+    }
+  }
+
   function createAvatarMedia(src, alt, options) {
     const opts = Object.assign({autoplayVideo: true}, options);
-    const isVideo = isVideoAvatar(src);
+    const resolvedSrc = resolveWidgetAssetUrl(src, state.avatar);
+    const isVideo = isVideoAvatar(resolvedSrc);
     const media = document.createElement(isVideo ? "video" : "img");
-    media.src = src;
+    media.src = resolvedSrc;
     if (isVideo) {
       media.muted = true;
       media.autoplay = Boolean(opts.autoplayVideo);
@@ -445,6 +460,12 @@
 
   input.addEventListener("input", updateInputAvailability);
 
+  const suggestions = document.createElement("div");
+  suggestions.className = "chat-widget-suggestions hidden";
+  const suggestionsTrack = document.createElement("div");
+  suggestionsTrack.className = "chat-widget-suggestions-track";
+  suggestions.appendChild(suggestionsTrack);
+
   const clearLink = document.createElement("div");
   clearLink.className = "chat-widget-clear-link";
   clearLink.textContent = t("startNewConversation");
@@ -452,6 +473,7 @@
 
   modal.appendChild(header);
   modal.appendChild(body);
+  modal.appendChild(suggestions);
   modal.appendChild(inputRow);
   modal.appendChild(clearLink);
 
@@ -590,10 +612,28 @@
     return hasData ? payload : null;
   }
 
+  function wait(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function hasUserMessage() {
+    return state.conversation.some(function (message) {
+      return message.role === "user";
+    });
+  }
+
+  function introCharacterDelay(char) {
+    if (/\s/.test(char)) return 12;
+    if (/[.,!?;:]/.test(char)) return 90;
+    return 24;
+  }
+
   function updateStartNewVisibility() {
     const show = state.conversation.length > 1;
     clearLink.style.display = show ? "block" : "none";
-    clearLink.classList.toggle("disabled", state.typing);
+    clearLink.classList.toggle("disabled", state.typing || state.introInProgress);
   }
 
   function startNewConversationFlow() {
@@ -620,11 +660,13 @@
 
   function updateInputAvailability() {
     const blocked = needsUserDetails();
-    input.disabled = blocked;
+    input.disabled = blocked || state.introInProgress;
     const emptyMessage = !input.value.trim();
-    sendBtn.disabled = blocked || state.sending || emptyMessage;
+    sendBtn.disabled =
+      blocked || state.sending || state.introInProgress || emptyMessage;
     inputRow.classList.toggle("hidden", blocked);
     input.placeholder = blocked ? t("blockedPlaceholder") : t("placeholder");
+    renderSuggestions();
   }
 
   function toggleUserOverlay(message) {
@@ -650,6 +692,55 @@
       phoneField.field.placeholder = formatDialPlaceholder(dial);
     } catch (_) {
       // ignore placeholder failures
+    }
+  }
+
+  function renderSuggestions() {
+    const show =
+      state.promptOptions.length > 0 &&
+      !needsUserDetails() &&
+      !state.introInProgress &&
+      !hasUserMessage() &&
+      !(state.conversationId && state.conversation.length === 0);
+
+    suggestions.classList.toggle("hidden", !show);
+    suggestionsTrack.innerHTML = "";
+    if (!show) return;
+
+    state.promptOptions.forEach(function (prompt) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "chat-widget-suggestion";
+      button.textContent = prompt;
+      button.title = prompt;
+      button.disabled = state.sending || state.typing || state.introInProgress;
+      button.addEventListener("click", function () {
+        if (button.disabled) return;
+        input.value = "";
+        sendMessage(prompt);
+      });
+      suggestionsTrack.appendChild(button);
+    });
+  }
+
+  async function loadDefaultQuestions() {
+    try {
+      const locale = encodeURIComponent(state.lang || "en");
+      const res = await fetch(host + `/api/default-questions?locale=${locale}`);
+      if (!res.ok) throw new Error(`default questions ${res.status}`);
+      const data = await res.json();
+      state.promptOptions = Array.isArray(data?.questions)
+        ? data.questions
+            .map(function (question) {
+              return typeof question === "string" ? question.trim() : "";
+            })
+            .filter(Boolean)
+        : [];
+    } catch (e) {
+      console.warn("[chat-widget] failed to load prompt suggestions", e);
+      state.promptOptions = [];
+    } finally {
+      renderSuggestions();
     }
   }
 
@@ -682,6 +773,7 @@
     }
 
     updateStartNewVisibility();
+    renderSuggestions();
   }
 
   async function startIntroConversation(userPayload) {
@@ -693,14 +785,33 @@
     const opening = openingTemplate.replace(/\{\{\s*first_name\s*\}\}/gi, firstName);
 
     state.introInProgress = true;
+    state.hasStarted = true;
+    updateInputAvailability();
     try {
       const intro = opening || t("fallback");
-      state.conversation.push({role: "assistant", content: intro});
-      state.hasStarted = true;
+      state.typing = true;
       renderMessages();
+      await wait(700);
+      state.typing = false;
+
+      const chars = Array.from(intro);
+      const firstChar = chars.shift() || "";
+      state.conversation.push({role: "assistant", content: firstChar});
+      renderMessages();
+
+      const introIndex = state.conversation.length - 1;
+      for (const char of chars) {
+        if (!state.introInProgress) return;
+        state.conversation[introIndex].content += char;
+        renderMessages();
+        await wait(introCharacterDelay(char));
+      }
+
       persistConversation([{role: "assistant", content: intro}]);
     } finally {
       state.introInProgress = false;
+      state.typing = false;
+      renderMessages();
       updateInputAvailability();
     }
   }
@@ -980,7 +1091,9 @@
         state.colors.button ||
         "#A8C957",
     };
-    state.avatar = chatbot.avatar || ds.avatar || state.avatar;
+    state.avatar = resolveWidgetAssetUrl(
+      chatbot.avatar || ds.avatar || state.avatar
+    );
     state.greeting =
       pickLocalized(chatbot.greeting, state.lang) ||
       chatbot.greeting ||
@@ -1226,6 +1339,7 @@
     loadExternalTranslations(state.lang).then(applyTranslations);
     toggleUserOverlay();
     setPhonePlaceholder();
+    loadDefaultQuestions();
     loadConversationFromServer();
 
     const detailsUrl = host + "/api/agents/details";
