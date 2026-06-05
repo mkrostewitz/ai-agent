@@ -4,12 +4,8 @@ import {useRouter, useSearchParams} from "next/navigation";
 import {useState} from "react";
 import {FiLock, FiLogIn} from "react-icons/fi";
 
+import {adminSetupPath, safeAdminNextPath} from "@/app/lib/adminRoutes";
 import styles from "../admin.module.css";
-
-function safeNextPath(value) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/admin";
-  return value;
-}
 
 export default function LoginForm() {
   const router = useRouter();
@@ -33,10 +29,16 @@ export default function LoginForm() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        if (response.status === 409 && data.setupRequired) {
+          router.replace(adminSetupPath(searchParams.get("next")));
+          router.refresh();
+          return;
+        }
+
         throw new Error(data.error || "Unable to sign in.");
       }
 
-      router.replace(safeNextPath(searchParams.get("next")));
+      router.replace(safeAdminNextPath(searchParams.get("next")));
       router.refresh();
     } catch (loginError) {
       setError(loginError.message);

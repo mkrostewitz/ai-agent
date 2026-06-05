@@ -1,18 +1,18 @@
+import {redirect} from "next/navigation";
+
 import {getCurrentAdminUser, isSetupComplete} from "@/app/lib/adminAuth";
+import {adminSetupPath, getAdminNextParam} from "@/app/lib/adminRoutes";
 import AdminDashboard from "./AdminDashboard";
 import LoginForm from "./login/LoginForm";
-import SetupForm from "./setup/SetupForm";
 import styles from "./admin.module.css";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+export default async function AdminPage({searchParams}) {
+  const next = getAdminNextParam(searchParams);
+
   if (!(await isSetupComplete())) {
-    return (
-      <main className={styles.loginShell}>
-        <SetupForm />
-      </main>
-    );
+    redirect(adminSetupPath(next));
   }
 
   const user = await getCurrentAdminUser();

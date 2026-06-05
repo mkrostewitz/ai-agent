@@ -8,6 +8,7 @@ import {
   setSessionCookie,
   verifyAdminPassword,
 } from "@/app/lib/adminAuth";
+import {ADMIN_SETUP_PATH} from "@/app/lib/adminRoutes";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,11 @@ export async function POST(request) {
   try {
     if (!(await isSetupComplete())) {
       return NextResponse.json(
-        {error: "Initial setup is required."},
+        {
+          error: "Initial setup is required.",
+          setupRequired: true,
+          setupUrl: ADMIN_SETUP_PATH,
+        },
         {status: 409}
       );
     }

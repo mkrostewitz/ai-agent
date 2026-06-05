@@ -11,12 +11,8 @@ import {
   FiX,
 } from "react-icons/fi";
 
+import {safeAdminNextPath} from "@/app/lib/adminRoutes";
 import styles from "../admin.module.css";
-
-function safeNextPath(value) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/admin";
-  return value;
-}
 
 export default function SetupForm() {
   const router = useRouter();
@@ -71,7 +67,7 @@ export default function SetupForm() {
         throw new Error(data.error || "Unable to complete setup.");
       }
 
-      router.replace(safeNextPath(searchParams.get("next")));
+      router.replace(safeAdminNextPath(searchParams.get("next")));
       router.refresh();
     } catch (setupError) {
       setError(setupError.message);
