@@ -656,16 +656,226 @@ function EmbedModal({agent, onClose, onToast}) {
   );
 }
 
+function AgentSettingsPanel({
+  adminStatus,
+  namespaceOptions,
+  onSave,
+  saving,
+  settings,
+  setSettings,
+}) {
+  const selectedNamespace = String(settings.namespace || "").trim();
+  const namespaceSelectOptions = selectedNamespace
+    ? [
+        selectedNamespace,
+        ...namespaceOptions.filter((namespace) => namespace !== selectedNamespace),
+      ]
+    : namespaceOptions;
+  const namespaceDropdownOptions = [
+    {value: "", label: "All namespaces"},
+    ...namespaceSelectOptions.map((namespace) => ({
+      value: namespace,
+      label: namespace,
+    })),
+  ];
+
+  return (
+    <div className={styles.agentSettingsPanel}>
+      <div className={styles.panelHeader}>
+        <div className={styles.titleBlock}>
+          <h1>Agent Settings</h1>
+        </div>
+        <div className={styles.sectionActions}>
+          <div
+            className={`${styles.statusPill} ${adminStatus.className}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className={styles.statusDot} aria-hidden="true" />
+            {adminStatus.label}
+          </div>
+        </div>
+      </div>
+
+      <label className={styles.field}>
+        Instructions
+        <textarea
+          className={styles.largeTextarea}
+          value={settings.instruction || ""}
+          onChange={(event) =>
+            setSettings((current) => ({...current, instruction: event.target.value}))
+          }
+        />
+      </label>
+
+      <div className={styles.settingsGrid}>
+        <label className={styles.field}>
+          Model
+          <input
+            value={settings.model || ""}
+            readOnly
+            aria-readonly="true"
+          />
+        </label>
+        <SelectField
+          label="Namespace"
+          options={namespaceDropdownOptions}
+          value={settings.namespace || ""}
+          onChange={(namespace) =>
+            setSettings((current) => ({...current, namespace}))
+          }
+        />
+        <label className={styles.field}>
+          Retrieval K
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={settings.retrieval_k || 6}
+            onChange={(event) =>
+              setSettings((current) => ({
+                ...current,
+                retrieval_k: Number(event.target.value),
+              }))
+            }
+          />
+        </label>
+      </div>
+
+      <div className={styles.sliderGrid}>
+        {[
+          ["temperature", "Temperature", 0, 2, 0.05],
+          ["top_p", "Top P", 0, 1, 0.05],
+        ].map(([key, label, min, max, step]) => (
+          <label key={key} className={styles.field}>
+            <span className={styles.fieldHeader}>
+              <span>{label}</span>
+              <strong>{settings[key]}</strong>
+            </span>
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={settings[key] ?? DEFAULT_SETTINGS[key]}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  [key]: Number(event.target.value),
+                }))
+              }
+            />
+          </label>
+        ))}
+      </div>
+
+      <div className={styles.settingsGrid}>
+        <label className={styles.field}>
+          Top K
+          <input
+            type="number"
+            min="1"
+            max="200"
+            value={settings.top_k || 40}
+            onChange={(event) =>
+              setSettings((current) => ({...current, top_k: Number(event.target.value)}))
+            }
+          />
+        </label>
+        <label className={styles.field}>
+          Max tokens
+          <input
+            type="number"
+            min="128"
+            max="12000"
+            value={settings.max_tokens || 2000}
+            onChange={(event) =>
+              setSettings((current) => ({
+                ...current,
+                max_tokens: Number(event.target.value),
+              }))
+            }
+          />
+        </label>
+      </div>
+
+      <div className={styles.integrationFooterActions}>
+        <button className={styles.primaryButton} onClick={onSave} disabled={saving}>
+          <FiSave aria-hidden="true" />
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ThemeColorsSection({agent, onSaveAgent, saving, setAgent}) {
+  return (
+    <section className={styles.agentConfigSection}>
+      <div className={styles.sectionHeader}>
+        <h2>Theme Colors</h2>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          onClick={onSaveAgent}
+          disabled={saving}
+        >
+          <FiSave aria-hidden="true" />
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
+
+      <div className={styles.colorGrid}>
+        {[
+          ["primary_color", "Primary"],
+          ["secondary_color", "Secondary"],
+          ["button_color", "Button"],
+        ].map(([key, label]) => (
+          <label key={key} className={styles.field}>
+            {label}
+            <span className={styles.colorInput}>
+              <input
+                type="color"
+                value={agent[key] || "#000000"}
+                onChange={(event) =>
+                  setAgent((current) => ({
+                    ...current,
+                    [key]: event.target.value,
+                  }))
+                }
+              />
+              <input
+                value={agent[key] || ""}
+                onChange={(event) =>
+                  setAgent((current) => ({
+                    ...current,
+                    [key]: event.target.value,
+                  }))
+                }
+              />
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AgentSection({
+  adminStatus,
   agent,
   setAgent,
   chatPrompts,
   setChatPrompts,
+  namespaceOptions,
   onOpenEmbed,
   onSaveAgent,
+  onSaveSettings,
   onSavePrompts,
   onUploadAvatar,
   saving,
+  settings,
+  setSettings,
 }) {
   async function handleAvatarFileChange(event) {
     const input = event.currentTarget;
@@ -694,6 +904,8 @@ function AgentSection({
     );
   }
 
+  const isAgentReady = adminStatus?.label === "Ready";
+
   return (
     <section className={styles.agentWorkspace}>
       <div className={styles.panelHeader}>
@@ -703,19 +915,14 @@ function AgentSection({
       </div>
 
       <div className={styles.agentSectionStack}>
-        <section className={`${styles.agentConfigSection} ${styles.agentUtilitySection}`}>
-          <div className={styles.sectionHeader}>
-            <h2>Widget Embed</h2>
-            <button
-              type="button"
-              className={styles.ghostButton}
-              onClick={onOpenEmbed}
-            >
-              <FiCode aria-hidden="true" />
-              Embed
-            </button>
-          </div>
-        </section>
+        <AgentSettingsPanel
+          adminStatus={adminStatus}
+          namespaceOptions={namespaceOptions}
+          onSave={onSaveSettings}
+          saving={saving}
+          settings={settings}
+          setSettings={setSettings}
+        />
 
         <section className={styles.agentConfigSection}>
           <div className={styles.sectionHeader}>
@@ -808,54 +1015,6 @@ function AgentSection({
                   "How can I help today?"}
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className={styles.agentConfigSection}>
-          <div className={styles.sectionHeader}>
-            <h2>Theme Colors</h2>
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={onSaveAgent}
-              disabled={saving}
-            >
-              <FiSave aria-hidden="true" />
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-
-          <div className={styles.colorGrid}>
-            {[
-              ["primary_color", "Primary"],
-              ["secondary_color", "Secondary"],
-              ["button_color", "Button"],
-            ].map(([key, label]) => (
-              <label key={key} className={styles.field}>
-                {label}
-                <span className={styles.colorInput}>
-                  <input
-                    type="color"
-                    value={agent[key] || "#000000"}
-                    onChange={(event) =>
-                      setAgent((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    value={agent[key] || ""}
-                    onChange={(event) =>
-                      setAgent((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                  />
-                </span>
-              </label>
-            ))}
           </div>
         </section>
 
@@ -996,17 +1155,33 @@ function AgentSection({
             )}
           </div>
         </section>
+
+        {isAgentReady ? (
+          <section className={`${styles.agentConfigSection} ${styles.agentUtilitySection}`}>
+            <div className={styles.sectionHeader}>
+              <h2>Widget Embed</h2>
+              <button
+                type="button"
+                className={styles.ghostButton}
+                onClick={onOpenEmbed}
+              >
+                <FiCode aria-hidden="true" />
+                Embed
+              </button>
+            </div>
+          </section>
+        ) : null}
       </div>
     </section>
   );
 }
 
 function SettingsSection({
-  namespaceOptions,
-  settings,
-  setSettings,
+  agent,
+  setAgent,
   system,
   setSystem,
+  onSaveAgent,
   onSave,
   onSendTestEmail,
   saving,
@@ -1036,20 +1211,6 @@ function SettingsSection({
     ? styles.connectionChipDisconnected
     : styles.connectionChipError;
   const mailEditable = mail.provider !== "disabled";
-  const selectedNamespace = String(settings.namespace || "").trim();
-  const namespaceSelectOptions = selectedNamespace
-    ? [
-        selectedNamespace,
-        ...namespaceOptions.filter((namespace) => namespace !== selectedNamespace),
-      ]
-    : namespaceOptions;
-  const namespaceDropdownOptions = [
-    {value: "", label: "All namespaces"},
-    ...namespaceSelectOptions.map((namespace) => ({
-      value: namespace,
-      label: namespace,
-    })),
-  ];
 
   function setMailField(field, value) {
     setSystem((current) => ({
@@ -1104,117 +1265,12 @@ function SettingsSection({
 
   return (
     <section className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div className={styles.titleBlock}>
-          <h1>Agent Settings</h1>
-        </div>
-        <button className={styles.primaryButton} onClick={onSave} disabled={saving}>
-          <FiSave aria-hidden="true" />
-          {saving ? "Saving..." : "Save"}
-        </button>
-      </div>
-
-      <label className={styles.field}>
-        Instructions
-        <textarea
-          className={styles.largeTextarea}
-          value={settings.instruction || ""}
-          onChange={(event) =>
-            setSettings((current) => ({...current, instruction: event.target.value}))
-          }
-        />
-      </label>
-
-      <div className={styles.settingsGrid}>
-        <label className={styles.field}>
-          Model
-          <input
-            value={settings.model || ""}
-            readOnly
-            aria-readonly="true"
-          />
-        </label>
-        <SelectField
-          label="Namespace"
-          options={namespaceDropdownOptions}
-          value={settings.namespace || ""}
-          onChange={(namespace) =>
-            setSettings((current) => ({...current, namespace}))
-          }
-        />
-        <label className={styles.field}>
-          Retrieval K
-          <input
-            type="number"
-            min="1"
-            max="20"
-            value={settings.retrieval_k || 6}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                retrieval_k: Number(event.target.value),
-              }))
-            }
-          />
-        </label>
-      </div>
-
-      <div className={styles.sliderGrid}>
-        {[
-          ["temperature", "Temperature", 0, 2, 0.05],
-          ["top_p", "Top P", 0, 1, 0.05],
-        ].map(([key, label, min, max, step]) => (
-          <label key={key} className={styles.field}>
-            <span className={styles.fieldHeader}>
-              <span>{label}</span>
-              <strong>{settings[key]}</strong>
-            </span>
-            <input
-              type="range"
-              min={min}
-              max={max}
-              step={step}
-              value={settings[key] ?? DEFAULT_SETTINGS[key]}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  [key]: Number(event.target.value),
-                }))
-              }
-            />
-          </label>
-        ))}
-      </div>
-
-      <div className={styles.settingsGrid}>
-        <label className={styles.field}>
-          Top K
-          <input
-            type="number"
-            min="1"
-            max="200"
-            value={settings.top_k || 40}
-            onChange={(event) =>
-              setSettings((current) => ({...current, top_k: Number(event.target.value)}))
-            }
-          />
-        </label>
-        <label className={styles.field}>
-          Max tokens
-          <input
-            type="number"
-            min="128"
-            max="12000"
-            value={settings.max_tokens || 2000}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                max_tokens: Number(event.target.value),
-              }))
-            }
-          />
-        </label>
-      </div>
+      <ThemeColorsSection
+        agent={agent}
+        onSaveAgent={onSaveAgent}
+        saving={saving}
+        setAgent={setAgent}
+      />
 
       <div className={styles.integrationPanel}>
         <div className={styles.integrationHeader}>
@@ -2161,39 +2217,46 @@ export default function AdminDashboard({user}) {
             </span>
             <h1>Manage Agent</h1>
           </div>
-          <div className={styles.topActions}>
-            <div
-              className={`${styles.statusPill} ${adminStatus.className}`}
-              role="status"
-              aria-live="polite"
-            >
-              <span className={styles.statusDot} aria-hidden="true" />
-              {adminStatus.label}
+          {activeTab !== "profile" ? (
+            <div className={styles.topActions}>
+              <div
+                className={`${styles.statusPill} ${adminStatus.className}`}
+                role="status"
+                aria-live="polite"
+              >
+                <span className={styles.statusDot} aria-hidden="true" />
+                {adminStatus.label}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         {activeTab === "profile" ? (
           <AgentSection
+            adminStatus={adminStatus}
             agent={agent}
             setAgent={setAgent}
             chatPrompts={chatPrompts}
             setChatPrompts={setChatPrompts}
+            namespaceOptions={namespaceOptions}
             onOpenEmbed={() => setEmbedOpen(true)}
             onSaveAgent={saveAgentProfile}
+            onSaveSettings={saveSettings}
             onSavePrompts={saveChatPrompts}
             onUploadAvatar={uploadAvatar}
             saving={busy}
+            settings={settings}
+            setSettings={setSettings}
           />
         ) : null}
 
         {activeTab === "settings" ? (
           <SettingsSection
-            namespaceOptions={namespaceOptions}
-            settings={settings}
-            setSettings={setSettings}
+            agent={agent}
+            setAgent={setAgent}
             system={system}
             setSystem={setSystem}
+            onSaveAgent={saveAgentProfile}
             onSave={saveSettings}
             onSendTestEmail={sendTestEmail}
             saving={busy}

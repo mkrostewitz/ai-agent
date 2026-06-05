@@ -525,6 +525,7 @@
 }
 
 .setupNote,
+.agentSettingsPanel,
 .integrationPanel {
   border: 1px solid #d8e0e6;
   border-radius: 8px;
@@ -631,10 +632,15 @@
   color: #9f1d13;
 }
 
+.agentSettingsPanel,
 .integrationPanel {
   display: grid;
   gap: 14px;
   padding: 16px;
+}
+
+.agentSettingsPanel {
+  background: #ffffff;
 }
 
 .integrationHeader {
@@ -1687,6 +1693,7 @@
 .conversationList,
 .tableShell,
 .setupNote,
+.agentSettingsPanel,
 .integrationPanel,
 .modalPanel,
 .embedAgentSummary,
