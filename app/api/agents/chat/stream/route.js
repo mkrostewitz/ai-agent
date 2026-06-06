@@ -187,6 +187,47 @@ function fallbackForLang(lang) {
   return "I don't know based on the provided context.";
 }
 
+function retrievalUnavailableForLang(lang) {
+  const base = normalizeLang(lang)?.slice(0, 2);
+  if (base === "de") {
+    return "Ich kann gerade nicht auf die Wissensdatenbank zugreifen. Bitte versuche es gleich erneut.";
+  }
+  if (base === "it") {
+    return "Al momento non riesco ad accedere alla base di conoscenza. Riprova tra poco.";
+  }
+  return "I can't access the knowledge base right now. Please try again shortly.";
+}
+
+function isIdentityQuestion(text) {
+  const t = (text || "").toLowerCase();
+  if (!t.trim()) return false;
+
+  return [
+    "who are you",
+    "what is your name",
+    "your name",
+    "wer bist du",
+    "wer du bist",
+    "wie heißt du",
+    "wie heisst du",
+    "sag mir wer du",
+    "chi sei",
+    "come ti chiami",
+  ].some((hint) => t.includes(hint));
+}
+
+function identityForLang(lang, profile) {
+  const fullName = profile?.fullName || "the configured person";
+  const base = normalizeLang(lang)?.slice(0, 2);
+  if (base === "de") {
+    return `Ich bin der digitale persönliche Assistent von ${fullName}.`;
+  }
+  if (base === "it") {
+    return `Sono l'assistente personale digitale di ${fullName}.`;
+  }
+  return `I am the digital personal assistant for ${fullName}.`;
+}
+
 function createSseTextResponse(text) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -433,14 +474,14 @@ async function retrieveContextWithLocalCosine(
       hits: ranked.length,
     });
 
-    return ranked;
+    return {contexts: ranked, error: null};
   } catch (error) {
     console.warn("Chat stream: local retrieval fallback failed", {
       message: error?.message || String(error),
       namespace: namespace || null,
       reason,
     });
-    return [];
+    return {contexts: [], error};
   }
 }
 
@@ -497,7 +538,7 @@ async function retrieveContext(question, namespace, retrievalK) {
   let client;
   let collection;
   try {
-    if (!hasMongoConfig()) return [];
+    if (!hasMongoConfig()) return {contexts: [], error: null};
 
     client = createMongoClient();
     await client.connect();
@@ -527,17 +568,17 @@ async function retrieveContext(question, namespace, retrievalK) {
       hits: contexts.length,
     });
 
-    if (namespace && contexts.length === 0) {
+    if (contexts.length === 0) {
       return retrieveContextWithLocalCosine(
         collection,
         question,
         namespace,
         retrievalK,
-        "empty-vector-namespace"
+        namespace ? "empty-vector-namespace" : "empty-vector-results"
       );
     }
 
-    return contexts;
+    return {contexts, error: null};
   } catch (error) {
     if (collection) {
       console.warn(
@@ -560,7 +601,7 @@ async function retrieveContext(question, namespace, retrievalK) {
       message: error?.message || String(error),
       namespace: namespace || null,
     });
-    return [];
+    return {contexts: [], error};
   } finally {
     if (client) await client.close();
   }
@@ -620,11 +661,15 @@ export async function POST(req) {
       questionPreview: question.slice(0, 120),
     });
 
-    const contexts = rankContexts(
-      question,
-      await retrieveContext(question, namespace, retrievalK)
-    );
+    const retrieval = await retrieveContext(question, namespace, retrievalK);
+    const contexts = rankContexts(question, retrieval.contexts || []);
     if (!contexts.length) {
+      if (isIdentityQuestion(question) && profile?.fullName) {
+        return createSseTextResponse(identityForLang(responseLang, profile));
+      }
+      if (retrieval.error) {
+        return createSseTextResponse(retrievalUnavailableForLang(responseLang));
+      }
       return createSseTextResponse(fallbackForLang(responseLang));
     }
     const prompt = buildPrompt(

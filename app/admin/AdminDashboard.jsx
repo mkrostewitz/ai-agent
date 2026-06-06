@@ -64,6 +64,36 @@ const EMBED_LANGUAGE_OPTIONS = [
 
 const DEFAULT_EMBED_HOST = "https://your-agent-domain.com";
 
+const REGISTRATION_FIELDS = [
+  {key: "first_name", label: "First name"},
+  {key: "last_name", label: "Last name"},
+  {key: "phone", label: "Phone"},
+  {key: "email", label: "Email"},
+  {key: "company", label: "Company"},
+  {key: "address", label: "Address"},
+];
+
+const GREETING_FIELD_TOKENS = [
+  {key: "first_name", label: "First name", token: "{{FName}}"},
+  {key: "last_name", label: "Last name", token: "{{LName}}"},
+  {key: "phone", label: "Phone", token: "{{Phone}}"},
+  {key: "email", label: "Email", token: "{{Email}}"},
+  {key: "company", label: "Company", token: "{{Company}}"},
+  {key: "address", label: "Address", token: "{{Address}}"},
+];
+
+const DEFAULT_REGISTRATION_SETTINGS = {
+  enabled: true,
+  fields: {
+    first_name: {show: true, required: true},
+    last_name: {show: true, required: true},
+    phone: {show: true, required: false},
+    email: {show: true, required: true},
+    company: {show: false, required: false},
+    address: {show: false, required: false},
+  },
+};
+
 const DEFAULT_SETTINGS = {
   instruction: "",
   model: "phi3:mini",
@@ -74,6 +104,7 @@ const DEFAULT_SETTINGS = {
   top_k: 40,
   top_p: 0.9,
   max_tokens: 2000,
+  registration: DEFAULT_REGISTRATION_SETTINGS,
 };
 
 const DEFAULT_SYSTEM = {
@@ -348,6 +379,38 @@ function buildSystemPayload(system = {}) {
   return payload;
 }
 
+function normalizeRegistrationDraft(registration = {}) {
+  const fields = REGISTRATION_FIELDS.reduce((result, field) => {
+    const defaultField =
+      DEFAULT_REGISTRATION_SETTINGS.fields[field.key] || {
+        show: false,
+        required: false,
+      };
+    const currentField = registration?.fields?.[field.key] || {};
+    const show =
+      typeof currentField.show === "boolean" ? currentField.show : defaultField.show;
+
+    result[field.key] = {
+      show,
+      required:
+        show &&
+        (typeof currentField.required === "boolean"
+          ? currentField.required
+          : defaultField.required),
+    };
+
+    return result;
+  }, {});
+
+  return {
+    enabled:
+      typeof registration?.enabled === "boolean"
+        ? registration.enabled
+        : DEFAULT_REGISTRATION_SETTINGS.enabled,
+    fields,
+  };
+}
+
 function normalizeLocation(tracking = {}) {
   return (
     tracking.address ||
@@ -398,6 +461,7 @@ function getConversationMapCoordinates(conversation) {
 function conversationTitle(conversation = {}) {
   return (
     conversation.user?.name ||
+    conversation.user?.company ||
     conversation.user?.email ||
     conversation.conversation_id ||
     "Conversation"
@@ -415,7 +479,8 @@ function conversationSourceLabel(conversation = {}) {
 function conversationContactLine(conversation = {}) {
   const email = conversation.user?.email || "No email";
   const phone = conversation.user?.phone || "No phone";
-  return `${email} - ${phone}`;
+  const company = conversation.user?.company;
+  return [email, phone, company].filter(Boolean).join(" - ");
 }
 
 function conversationActions(conversation = {}) {
@@ -725,6 +790,110 @@ function SelectField({label, onChange, options, value}) {
   );
 }
 
+function RegistrationSettingsPanel({settings, setSettings}) {
+  const registration = normalizeRegistrationDraft(settings.registration);
+  const enabled = registration.enabled;
+
+  function updateRegistration(updater) {
+    setSettings((current) => {
+      const currentRegistration = normalizeRegistrationDraft(current.registration);
+      return {
+        ...current,
+        registration: updater(currentRegistration),
+      };
+    });
+  }
+
+  function toggleEnabled(checked) {
+    updateRegistration((current) => ({...current, enabled: checked}));
+  }
+
+  function toggleFieldVisibility(key, checked) {
+    updateRegistration((current) => ({
+      ...current,
+      fields: {
+        ...current.fields,
+        [key]: {
+          ...current.fields[key],
+          show: checked,
+          required: checked ? current.fields[key].required : false,
+        },
+      },
+    }));
+  }
+
+  function toggleFieldRequired(key, checked) {
+    updateRegistration((current) => ({
+      ...current,
+      fields: {
+        ...current.fields,
+        [key]: {
+          ...current.fields[key],
+          show: checked ? true : current.fields[key].show,
+          required: checked,
+        },
+      },
+    }));
+  }
+
+  return (
+    <section className={styles.registrationSettings}>
+      <div className={styles.registrationHeader}>
+        <div className={styles.titleBlock}>
+          <h2>Visitor registration</h2>
+          <p>Choose whether the widget asks for visitor details before chat.</p>
+        </div>
+        <label className={styles.checkboxField}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => toggleEnabled(event.target.checked)}
+          />
+          Collect details
+        </label>
+      </div>
+
+      <div className={styles.registrationFieldGrid} aria-disabled={!enabled}>
+        <div className={styles.registrationFieldHeader}>
+          <span>Field</span>
+          <span>Show</span>
+          <span>Require</span>
+        </div>
+        {REGISTRATION_FIELDS.map((field) => {
+          const fieldSettings = registration.fields[field.key];
+          return (
+            <div key={field.key} className={styles.registrationFieldRow}>
+              <strong>{field.label}</strong>
+              <label className={styles.checkboxField}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(fieldSettings.show)}
+                  disabled={!enabled}
+                  onChange={(event) =>
+                    toggleFieldVisibility(field.key, event.target.checked)
+                  }
+                />
+                Show
+              </label>
+              <label className={styles.checkboxField}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(fieldSettings.required)}
+                  disabled={!enabled || !fieldSettings.show}
+                  onChange={(event) =>
+                    toggleFieldRequired(field.key, event.target.checked)
+                  }
+                />
+                Required
+              </label>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function EmbedModal({agent, onClose, onToast}) {
   const [host, setHost] = useState(DEFAULT_EMBED_HOST);
   const [language, setLanguage] = useState("browser");
@@ -804,10 +973,23 @@ function EmbedModal({agent, onClose, onToast}) {
           <div className={styles.embedAgentSummary}>
             <div className={styles.embedAgentAvatar}>
               {isVideoAvatar(agent.avatar) ? (
-                <video src={agent.avatar} muted playsInline autoPlay loop />
+                <video
+                  src={agent.avatar}
+                  muted
+                  playsInline
+                  autoPlay
+                  loop
+                  preload="auto"
+                />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={agent.avatar} alt="" />
+                <img
+                  src={agent.avatar}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
+                />
               )}
             </div>
             <div>
@@ -1027,6 +1209,8 @@ function AgentSettingsPanel({
         </label>
       </div>
 
+      <RegistrationSettingsPanel settings={settings} setSettings={setSettings} />
+
       <div className={styles.integrationFooterActions}>
         <button className={styles.primaryButton} onClick={onSave} disabled={saving}>
           <FiSave aria-hidden="true" />
@@ -1105,6 +1289,8 @@ function AgentSection({
   settings,
   setSettings,
 }) {
+  const startingMessageRefs = useRef({});
+
   async function handleAvatarFileChange(event) {
     const input = event.currentTarget;
     const file = input.files?.[0];
@@ -1130,6 +1316,53 @@ function AgentSection({
         promptIndex === index ? {...prompt, active} : prompt
       )
     );
+  }
+
+  function updateLocalizedAgentField(field, lang, text) {
+    setAgent((current) => ({
+      ...current,
+      [field]: setLocalizedValue(current[field], lang, text),
+    }));
+  }
+
+  function insertStartingMessageToken(lang, fieldKey) {
+    const option = GREETING_FIELD_TOKENS.find((item) => item.key === fieldKey);
+    if (!option) return;
+
+    const input = startingMessageRefs.current[lang];
+    const selectionStart =
+      input && typeof input.selectionStart === "number"
+        ? input.selectionStart
+        : null;
+    const selectionEnd =
+      input && typeof input.selectionEnd === "number" ? input.selectionEnd : null;
+    let nextCursor = 0;
+
+    setAgent((current) => {
+      const currentText = localizedValue(current.starting_message, lang);
+      const start =
+        selectionStart === null
+          ? currentText.length
+          : Math.min(selectionStart, currentText.length);
+      const end =
+        selectionEnd === null ? start : Math.min(selectionEnd, currentText.length);
+      const nextText = `${currentText.slice(0, start)}${option.token}${currentText.slice(end)}`;
+      nextCursor = start + option.token.length;
+
+      return {
+        ...current,
+        starting_message: setLocalizedValue(current.starting_message, lang, nextText),
+      };
+    });
+
+    requestAnimationFrame(() => {
+      const currentInput = startingMessageRefs.current[lang];
+      if (!currentInput) return;
+      currentInput.focus();
+      if (typeof currentInput.setSelectionRange === "function") {
+        currentInput.setSelectionRange(nextCursor, nextCursor);
+      }
+    });
   }
 
   const isAgentReady = adminStatus?.label === "Ready";
@@ -1220,10 +1453,23 @@ function AgentSection({
               <div className={styles.agentPreviewHeader}>
                 <div className={styles.agentAvatarPreview}>
                   {isVideoAvatar(agent.avatar) ? (
-                    <video src={agent.avatar} muted playsInline autoPlay loop />
+                    <video
+                      src={agent.avatar}
+                      muted
+                      playsInline
+                      autoPlay
+                      loop
+                      preload="auto"
+                    />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={agent.avatar} alt="" />
+                    <img
+                      src={agent.avatar}
+                      alt=""
+                      loading="eager"
+                      decoding="async"
+                      fetchPriority="high"
+                    />
                   )}
                 </div>
                 <div>
@@ -1269,30 +1515,52 @@ function AgentSection({
                   <input
                     value={localizedValue(agent.greeting, language.code)}
                     onChange={(event) =>
-                      setAgent((current) => ({
-                        ...current,
-                        greeting: setLocalizedValue(
-                          current.greeting,
-                          language.code,
-                          event.target.value
-                        ),
-                      }))
+                      updateLocalizedAgentField(
+                        "greeting",
+                        language.code,
+                        event.target.value
+                      )
                     }
                   />
                 </label>
                 <label className={styles.field}>
-                  Starting message
-                  <input
-                    value={localizedValue(agent.starting_message, language.code)}
-                    onChange={(event) =>
-                      setAgent((current) => ({
-                        ...current,
-                        starting_message: setLocalizedValue(
-                          current.starting_message,
+                  <span className={styles.fieldLabelRow}>
+                    <span>Starting message</span>
+                    <select
+                      className={styles.inlineFieldSelect}
+                      defaultValue=""
+                      aria-label={`Insert field into ${language.label} starting message`}
+                      onChange={(event) => {
+                        insertStartingMessageToken(
                           language.code,
                           event.target.value
-                        ),
-                      }))
+                        );
+                        event.target.value = "";
+                      }}
+                    >
+                      <option value="">Insert field</option>
+                      {GREETING_FIELD_TOKENS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                  <input
+                    ref={(node) => {
+                      if (node) {
+                        startingMessageRefs.current[language.code] = node;
+                      } else {
+                        delete startingMessageRefs.current[language.code];
+                      }
+                    }}
+                    value={localizedValue(agent.starting_message, language.code)}
+                    onChange={(event) =>
+                      updateLocalizedAgentField(
+                        "starting_message",
+                        language.code,
+                        event.target.value
+                      )
                     }
                   />
                 </label>
@@ -2436,6 +2704,30 @@ function ConversationsSection({
                 <div>
                   <span>Phone</span>
                   <strong>{activeConversation.user?.phone || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Company</span>
+                  <strong>{activeConversation.user?.company || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Visitor address</span>
+                  <strong>{activeConversation.user?.address || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>City</span>
+                  <strong>{activeConversation.user?.city || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Region</span>
+                  <strong>{activeConversation.user?.region || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Postal code</span>
+                  <strong>{activeConversation.user?.postal_code || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span>Country</span>
+                  <strong>{activeConversation.user?.country || "Not provided"}</strong>
                 </div>
                 <div>
                   <span>Source</span>

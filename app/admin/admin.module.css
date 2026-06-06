@@ -377,6 +377,21 @@
   font-weight: 500;
 }
 
+.fieldLabelRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fieldLabelRow > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .field input,
 .field textarea,
 .field select {
@@ -389,6 +404,17 @@
   color: #14212b;
   font: inherit;
   font-weight: 300;
+}
+
+.field .inlineFieldSelect {
+  min-height: 30px;
+  width: auto;
+  min-width: 128px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.1;
 }
 
 .field input[readonly] {
@@ -642,6 +668,67 @@
 
 .agentSettingsPanel {
   background: #ffffff;
+}
+
+.registrationSettings {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e8eef2;
+  padding-top: 14px;
+}
+
+.registrationHeader,
+.registrationFieldHeader,
+.registrationFieldRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 120px;
+  gap: 12px;
+  align-items: center;
+}
+
+.registrationHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.registrationHeader h2 {
+  margin: 0;
+  color: #14212b;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.registrationFieldGrid {
+  display: grid;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #f8fafb;
+  overflow: hidden;
+}
+
+.registrationFieldGrid[aria-disabled="true"] {
+  opacity: 0.62;
+}
+
+.registrationFieldHeader,
+.registrationFieldRow {
+  padding: 10px 12px;
+}
+
+.registrationFieldHeader {
+  background: #eef4f7;
+  color: #657482;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.registrationFieldRow + .registrationFieldRow {
+  border-top: 1px solid #e8eef2;
+}
+
+.registrationFieldRow strong {
+  color: #253541;
+  font-size: 0.9rem;
 }
 
 .integrationHeader {
@@ -2567,5 +2654,18 @@
     border-color: var(--card-border);
     border-radius: 14px;
     box-shadow: var(--shadow-strong);
+  }
+
+  .registrationFieldHeader {
+    display: none;
+  }
+
+  .registrationHeader,
+  .registrationFieldRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .registrationFieldRow {
+    gap: 8px;
   }
 }

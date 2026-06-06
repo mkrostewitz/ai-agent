@@ -26,11 +26,32 @@ function normalizeUser(user = {}) {
   const name = cleanString(user.name) || [firstName, lastName].filter(Boolean).join(" ");
   const email = cleanString(user.email).toLowerCase();
   const phone = cleanString(user.phone);
+  const company = cleanString(user.company);
+  const addressLine1 = cleanString(user.address_line1 || user.addressLine1);
+  const addressLine2 = cleanString(user.address_line2 || user.addressLine2);
+  const city = cleanString(user.city);
+  const region = cleanString(user.region);
+  const postalCode = cleanString(user.postal_code || user.postalCode);
+  const country = cleanString(user.country);
+  const postalCity = [postalCode, city].filter(Boolean).join(" ");
+  const address =
+    cleanString(user.address) ||
+    [addressLine1, addressLine2, postalCity, region, country]
+      .filter(Boolean)
+      .join(", ");
 
   return {
-    name: name || email || phone || "Unknown visitor",
+    name: name || email || phone || company || "Unknown visitor",
     email,
     phone,
+    company,
+    address,
+    addressLine1,
+    addressLine2,
+    city,
+    region,
+    postalCode,
+    country,
   };
 }
 
@@ -82,6 +103,12 @@ function buildTextEmail({conversationId, user, messages, tracking, source, creat
     `Visitor: ${user.name}`,
     `Email: ${user.email || "Not provided"}`,
     `Phone: ${user.phone || "Not provided"}`,
+    `Company: ${user.company || "Not provided"}`,
+    `Address: ${user.address || "Not provided"}`,
+    `City: ${user.city || "Not provided"}`,
+    `Region: ${user.region || "Not provided"}`,
+    `Postal code: ${user.postalCode || "Not provided"}`,
+    `Country: ${user.country || "Not provided"}`,
     `Source: ${source || "widget"}`,
     `Location: ${getTrackingLine(tracking)}`,
     `Created: ${createdAt ? new Date(createdAt).toISOString() : new Date().toISOString()}`,
@@ -112,6 +139,12 @@ function buildHtmlEmail({conversationId, user, messages, tracking, source, creat
     ["Visitor", user.name],
     ["Email", user.email || "Not provided"],
     ["Phone", user.phone || "Not provided"],
+    ["Company", user.company || "Not provided"],
+    ["Address", user.address || "Not provided"],
+    ["City", user.city || "Not provided"],
+    ["Region", user.region || "Not provided"],
+    ["Postal code", user.postalCode || "Not provided"],
+    ["Country", user.country || "Not provided"],
     ["Source", source || "widget"],
     ["Location", getTrackingLine(tracking)],
     [

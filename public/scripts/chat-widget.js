@@ -31,6 +31,191 @@
   const forcedLang = useBrowserLang ? null : dsLangLower.slice(0, 2);
   const rawLocale = useBrowserLang ? navigator.language || "en" : dsLangRaw;
   const resolvedLang = (forcedLang || rawLocale || "en").slice(0, 2).toLowerCase();
+  const scriptTracking = {
+    countryCode: String(
+      ds.countryCode || ds.geoCountry || ds.geoCountryCode || ""
+    ).trim().toUpperCase(),
+    latitude: ds.latitude || ds.lat || ds.geoLatitude || ds.geoLat || "",
+    longitude:
+      ds.longitude ||
+      ds.lng ||
+      ds.lon ||
+      ds.geoLongitude ||
+      ds.geoLng ||
+      ds.geoLon ||
+      "",
+  };
+  const hasScriptTracking =
+    Boolean(scriptTracking.countryCode) ||
+    Boolean(scriptTracking.latitude && scriptTracking.longitude);
+
+  const REGISTRATION_FIELD_DEFINITIONS = [
+    {
+      key: "first_name",
+      labelKey: "firstNameLabel",
+      requiredKey: "firstNameRequired",
+      type: "text",
+      placeholder: "Jane",
+      autocomplete: "given-name",
+    },
+    {
+      key: "last_name",
+      labelKey: "lastNameLabel",
+      requiredKey: "lastNameRequired",
+      type: "text",
+      placeholder: "Doe",
+      autocomplete: "family-name",
+    },
+    {
+      key: "phone",
+      labelKey: "phoneLabel",
+      requiredKey: "phoneRequired",
+      type: "tel",
+      placeholder: "+41 123 456 789",
+      autocomplete: "tel",
+      fullSpan: true,
+    },
+    {
+      key: "email",
+      labelKey: "emailLabel",
+      requiredKey: "emailRequired",
+      type: "email",
+      placeholder: "jane.doe@email.com",
+      autocomplete: "email",
+      fullSpan: true,
+    },
+    {
+      key: "company",
+      labelKey: "companyLabel",
+      requiredKey: "companyRequired",
+      type: "text",
+      placeholder: "Acme GmbH",
+      autocomplete: "organization",
+      fullSpan: true,
+    },
+    {
+      key: "address",
+      labelKey: "addressLine1Label",
+      requiredKey: "addressRequired",
+      type: "search",
+      placeholder: "Street and house number",
+      autocomplete: "address-line1",
+      fullSpan: true,
+      addressSearch: true,
+      requiredWhenParentRequired: true,
+    },
+    {
+      key: "address_line2",
+      parentKey: "address",
+      labelKey: "addressLine2Label",
+      requiredKey: "addressLine2Required",
+      type: "text",
+      placeholder: "Apartment, suite, floor",
+      autocomplete: "address-line2",
+      fullSpan: true,
+    },
+    {
+      key: "city",
+      parentKey: "address",
+      labelKey: "cityLabel",
+      requiredKey: "cityRequired",
+      type: "text",
+      placeholder: "City",
+      autocomplete: "address-level2",
+      requiredWhenParentRequired: true,
+    },
+    {
+      key: "region",
+      parentKey: "address",
+      labelKey: "regionLabel",
+      requiredKey: "regionRequired",
+      type: "text",
+      placeholder: "State / region",
+      autocomplete: "address-level1",
+    },
+    {
+      key: "postal_code",
+      parentKey: "address",
+      labelKey: "postalCodeLabel",
+      requiredKey: "postalCodeRequired",
+      type: "text",
+      placeholder: "Postal code",
+      autocomplete: "postal-code",
+      requiredWhenParentRequired: true,
+    },
+    {
+      key: "country",
+      parentKey: "address",
+      labelKey: "countryLabel",
+      requiredKey: "countryRequired",
+      type: "text",
+      placeholder: "Country",
+      autocomplete: "country-name",
+      requiredWhenParentRequired: true,
+    },
+  ];
+
+  const DEFAULT_REGISTRATION_SETTINGS = {
+    enabled: true,
+    fields: {
+      first_name: {show: true, required: true},
+      last_name: {show: true, required: true},
+      phone: {show: true, required: false},
+      email: {show: true, required: true},
+      company: {show: false, required: false},
+      address: {show: false, required: false},
+    },
+  };
+
+  const REGISTRATION_TEMPLATE_FIELDS = [
+    {key: "first_name", aliases: ["FName", "first_name", "firstName"]},
+    {key: "last_name", aliases: ["LName", "last_name", "lastName"]},
+    {key: "phone", aliases: ["Phone", "phone"]},
+    {key: "email", aliases: ["Email", "email"]},
+    {key: "company", aliases: ["Company", "company"]},
+    {key: "address", aliases: ["Address", "address"]},
+  ];
+
+  function normalizeRegistrationConfig(config) {
+    const source =
+      config && typeof config === "object" && !Array.isArray(config)
+        ? config
+        : {};
+    const sourceFields =
+      source.fields && typeof source.fields === "object" && !Array.isArray(source.fields)
+        ? source.fields
+        : {};
+    const fields = {};
+
+    REGISTRATION_FIELD_DEFINITIONS.forEach(function (definition) {
+      const defaultField =
+        DEFAULT_REGISTRATION_SETTINGS.fields[definition.key] || {};
+      const field =
+        sourceFields[definition.key] &&
+        typeof sourceFields[definition.key] === "object" &&
+        !Array.isArray(sourceFields[definition.key])
+          ? sourceFields[definition.key]
+          : {};
+      const show =
+        typeof field.show === "boolean" ? field.show : Boolean(defaultField.show);
+      fields[definition.key] = {
+        show,
+        required:
+          show &&
+          (typeof field.required === "boolean"
+            ? field.required
+            : Boolean(defaultField.required)),
+      };
+    });
+
+    return {
+      enabled:
+        typeof source.enabled === "boolean"
+          ? source.enabled
+          : DEFAULT_REGISTRATION_SETTINGS.enabled,
+      fields,
+    };
+  }
 
   const state = {
     agent: null,
@@ -44,6 +229,11 @@
     greeting: "Hi there, how can I help you?",
     starting: "",
     avatar: host + "/avatars/Michael_Intro.mp4",
+    mapboxToken: "",
+    tracking: {
+      ...scriptTracking,
+      source: hasScriptTracking ? "script" : "",
+    },
     conversation: [],
     open: false,
     toastShown: false,
@@ -54,11 +244,25 @@
     hasStarted: false,
     introInProgress: false,
     promptOptions: [],
+    registration: normalizeRegistrationConfig(),
+    registrationCompleted: false,
     user: {
       first_name: "",
       last_name: "",
       email: "",
       phone: "",
+      company: "",
+      address: "",
+      address_line1: "",
+      address_line2: "",
+      city: "",
+      region: "",
+      postal_code: "",
+      country: "",
+      address_latitude: "",
+      address_longitude: "",
+      address_country_code: "",
+      full_address: "",
     },
   };
 
@@ -66,10 +270,12 @@
 
   function saveConversationCookie() {
     try {
-      const user = sanitizeUserPayload(state.user);
+      const user = getRegistrationUserPayload();
       const payload = {
         id: state.conversationId || null,
         lang: state.lang,
+        registrationCompleted:
+          registrationEnabled() && Boolean(state.registrationCompleted),
         ...(user ? {user} : {}),
       };
       const encoded = encodeURIComponent(JSON.stringify(payload));
@@ -91,7 +297,14 @@
       const parsed = JSON.parse(decodeURIComponent(raw));
       if (parsed?.id) state.conversationId = parsed.id;
       if (allowLang && parsed?.lang) state.lang = parsed.lang;
-      if (parsed?.user) state.user = {...state.user, ...parsed.user};
+      if (parsed?.user) {
+        const userPayload = sanitizeUserPayload(parsed.user);
+        if (userPayload) {
+          state.user = {...state.user, ...userPayload};
+          state.registrationCompleted = true;
+        }
+      }
+      if (parsed?.registrationCompleted) state.registrationCompleted = true;
     } catch (e) {
       console.warn("[chat-widget] failed to load conversation cookie", e);
     }
@@ -111,6 +324,11 @@
       if (!res.ok) throw new Error(`details ${res.status}`);
       const data = await res.json();
       const convo = data?.data?.conversation;
+      const userPayload = sanitizeUserPayload(data?.data?.user);
+      if (userPayload) {
+        state.user = {...state.user, ...userPayload};
+        state.registrationCompleted = true;
+      }
       if (Array.isArray(convo)) {
         state.conversation = convo.map((m) => ({
           role: m.role === "assistant" ? "assistant" : "user",
@@ -188,12 +406,34 @@
       firstNameLabel: "First name",
       lastNameLabel: "Last name",
       emailLabel: "Email",
-      phoneLabel: "Phone (optional)",
+      phoneLabel: "Phone",
+      companyLabel: "Company",
+      addressLabel: "Address",
+      addressSearchLabel: "Address search",
+      addressLine1Label: "Street address",
+      addressLine2Label: "Apartment / suite",
+      cityLabel: "City",
+      regionLabel: "State / region",
+      postalCodeLabel: "Postal code",
+      countryLabel: "Country",
+      optionalSuffix: "(optional)",
+      addressSuggestionsUnavailable: "Address autocomplete is unavailable.",
+      addressNoSuggestions: "No address matches found.",
       startChat: "Start chat",
       firstNameRequired: "First name is required.",
       lastNameRequired: "Last name is required.",
+      phoneRequired: "Phone is required.",
       emailRequired: "Email is required.",
       emailInvalid: "Email must be valid.",
+      companyRequired: "Company is required.",
+      addressRequired: "Address is required.",
+      addressLine1Required: "Street address is required.",
+      addressLine2Required: "Apartment / suite is required.",
+      cityRequired: "City is required.",
+      regionRequired: "State / region is required.",
+      postalCodeRequired: "Postal code is required.",
+      countryRequired: "Country is required.",
+      registrationRequired: "Please complete the required details to start chatting.",
       blockedPlaceholder: "Enter your details to start chatting",
       startNewConversation: "Start new conversation",
     },
@@ -210,12 +450,35 @@
       firstNameLabel: "Vorname",
       lastNameLabel: "Nachname",
       emailLabel: "E-Mail",
-      phoneLabel: "Telefon (optional)",
+      phoneLabel: "Telefon",
+      companyLabel: "Firma",
+      addressLabel: "Adresse",
+      addressSearchLabel: "Adresse suchen",
+      addressLine1Label: "Straße und Hausnummer",
+      addressLine2Label: "Adresszusatz",
+      cityLabel: "Stadt",
+      regionLabel: "Bundesland / Region",
+      postalCodeLabel: "Postleitzahl",
+      countryLabel: "Land",
+      optionalSuffix: "(optional)",
+      addressSuggestionsUnavailable: "Adress-Autovervollständigung ist nicht verfügbar.",
+      addressNoSuggestions: "Keine passenden Adressen gefunden.",
       startChat: "Chat starten",
       firstNameRequired: "Vorname ist erforderlich.",
       lastNameRequired: "Nachname ist erforderlich.",
+      phoneRequired: "Telefon ist erforderlich.",
       emailRequired: "E-Mail ist erforderlich.",
       emailInvalid: "E-Mail muss gültig sein.",
+      companyRequired: "Firma ist erforderlich.",
+      addressRequired: "Adresse ist erforderlich.",
+      addressLine1Required: "Straße und Hausnummer sind erforderlich.",
+      addressLine2Required: "Adresszusatz ist erforderlich.",
+      cityRequired: "Stadt ist erforderlich.",
+      regionRequired: "Bundesland / Region ist erforderlich.",
+      postalCodeRequired: "Postleitzahl ist erforderlich.",
+      countryRequired: "Land ist erforderlich.",
+      registrationRequired:
+        "Bitte füllen Sie die erforderlichen Angaben aus, um den Chat zu starten.",
       blockedPlaceholder: "Details eingeben, um zu starten",
       startNewConversation: "Neue Konversation starten",
     },
@@ -231,12 +494,36 @@
       firstNameLabel: "Nome",
       lastNameLabel: "Cognome",
       emailLabel: "Email",
-      phoneLabel: "Telefono (opzionale)",
+      phoneLabel: "Telefono",
+      companyLabel: "Azienda",
+      addressLabel: "Indirizzo",
+      addressSearchLabel: "Cerca indirizzo",
+      addressLine1Label: "Indirizzo",
+      addressLine2Label: "Appartamento / interno",
+      cityLabel: "Città",
+      regionLabel: "Provincia / regione",
+      postalCodeLabel: "CAP",
+      countryLabel: "Paese",
+      optionalSuffix: "(opzionale)",
+      addressSuggestionsUnavailable:
+        "Il completamento automatico dell'indirizzo non è disponibile.",
+      addressNoSuggestions: "Nessun indirizzo trovato.",
       startChat: "Inizia chat",
       firstNameRequired: "Il nome è obbligatorio.",
       lastNameRequired: "Il cognome è obbligatorio.",
+      phoneRequired: "Il telefono è obbligatorio.",
       emailRequired: "L'email è obbligatoria.",
       emailInvalid: "L'email deve essere valida.",
+      companyRequired: "L'azienda è obbligatoria.",
+      addressRequired: "L'indirizzo è obbligatorio.",
+      addressLine1Required: "L'indirizzo è obbligatorio.",
+      addressLine2Required: "Appartamento / interno è obbligatorio.",
+      cityRequired: "La città è obbligatoria.",
+      regionRequired: "La provincia / regione è obbligatoria.",
+      postalCodeRequired: "Il CAP è obbligatorio.",
+      countryRequired: "Il paese è obbligatorio.",
+      registrationRequired:
+        "Completa i dati obbligatori per iniziare la chat.",
       blockedPlaceholder: "Inserisci i dati per iniziare",
       startNewConversation: "Avvia nuova conversazione",
     },
@@ -282,11 +569,8 @@
     clearLink.textContent = t("startNewConversation");
     userTitle.textContent = t("userTitle");
     userSubtitle.textContent = t("userSubtitle");
-    firstField.wrapper.querySelector("span").textContent = t("firstNameLabel");
-    lastField.wrapper.querySelector("span").textContent = t("lastNameLabel");
-    emailField.wrapper.querySelector("span").textContent = t("emailLabel");
-    phoneField.wrapper.querySelector("span").textContent = t("phoneLabel");
     submitUser.textContent = t("startChat");
+    renderRegistrationFields();
   }
 
   async function loadCountryData() {
@@ -347,24 +631,59 @@
     }
   }
 
+  const avatarPreloadUrls = new Set();
+
+  function isWidgetHostUrl(src) {
+    try {
+      return new URL(src).origin === new URL(host).origin;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function preloadAvatarAsset(src) {
+    const resolvedSrc = resolveWidgetAssetUrl(src, state.avatar);
+    if (
+      !resolvedSrc ||
+      /^(data|blob):/i.test(resolvedSrc) ||
+      avatarPreloadUrls.has(resolvedSrc)
+    ) {
+      return resolvedSrc;
+    }
+
+    avatarPreloadUrls.add(resolvedSrc);
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.href = resolvedSrc;
+    link.as = isVideoAvatar(resolvedSrc) ? "video" : "image";
+    link.fetchPriority = "high";
+    if (isWidgetHostUrl(resolvedSrc)) {
+      link.crossOrigin = "anonymous";
+    }
+    document.head.appendChild(link);
+    return resolvedSrc;
+  }
+
   function createAvatarMedia(src, alt, options) {
     const opts = Object.assign({autoplayVideo: true}, options);
     const resolvedSrc = resolveWidgetAssetUrl(src, state.avatar);
     const isVideo = isVideoAvatar(resolvedSrc);
     const media = document.createElement(isVideo ? "video" : "img");
-    media.src = resolvedSrc;
+    media.dataset.avatarSrc = resolvedSrc;
+    media.dataset.avatarAutoplay = String(Boolean(opts.autoplayVideo));
+    if (isWidgetHostUrl(resolvedSrc)) {
+      media.crossOrigin = "anonymous";
+    }
     if (isVideo) {
       media.muted = true;
       media.autoplay = Boolean(opts.autoplayVideo);
       media.loop = Boolean(opts.autoplayVideo);
       media.playsInline = true;
       media.controls = false;
+      media.preload = "auto";
       media.setAttribute("aria-label", alt || "Chatbot");
       media.setAttribute("playsinline", "true");
       media.setAttribute("muted", "true");
-      if (!opts.autoplayVideo) {
-        media.preload = "metadata"; // load poster frame without playing
-      }
       if (opts.autoplayVideo) {
         media.setAttribute("autoplay", "true");
         media.addEventListener("loadeddata", function () {
@@ -375,22 +694,89 @@
       }
     } else {
       media.alt = alt || "Chatbot";
+      media.decoding = "async";
+      media.loading = "eager";
+      media.fetchPriority = "high";
     }
+    media.src = resolvedSrc;
     return media;
   }
 
-  function setAvatarMedia(container, src, alt, indicatorSelector, options) {
-    const indicator =
-      indicatorSelector && container.querySelector(indicatorSelector);
-    const existing = container.querySelector("img, video");
-    const media = createAvatarMedia(src, alt, options);
-    if (existing) {
+  function avatarMediaReady(media) {
+    if (!media) return false;
+    if (media.tagName === "IMG") {
+      return Boolean(media.complete && media.naturalWidth);
+    }
+    return typeof media.readyState === "number" && media.readyState >= 2;
+  }
+
+  function onAvatarMediaReady(media, onReady) {
+    if (avatarMediaReady(media)) {
+      onReady();
+      return;
+    }
+
+    let handled = false;
+    const readyEvent = media.tagName === "IMG" ? "load" : "loadeddata";
+    const done = function () {
+      if (handled) return;
+      handled = true;
+      media.removeEventListener(readyEvent, done);
+      media.removeEventListener("error", fail);
+      onReady();
+    };
+    const fail = function () {
+      handled = true;
+      media.removeEventListener(readyEvent, done);
+      media.removeEventListener("error", fail);
+    };
+
+    media.addEventListener(readyEvent, done);
+    media.addEventListener("error", fail);
+    if (media.tagName === "VIDEO" && typeof media.load === "function") {
+      media.load();
+    }
+  }
+
+  function mountAvatarMedia(container, existing, indicator, media) {
+    if (existing && existing.parentNode === container) {
       container.replaceChild(media, existing);
     } else if (indicator && indicator.parentNode === container) {
       container.insertBefore(media, indicator);
     } else {
       container.appendChild(media);
     }
+  }
+
+  function setAvatarMedia(container, src, alt, indicatorSelector, options) {
+    const indicator =
+      indicatorSelector && container.querySelector(indicatorSelector);
+    const existing = container.querySelector("img, video");
+    const opts = Object.assign({autoplayVideo: true}, options);
+    const resolvedSrc = preloadAvatarAsset(src);
+    const nextAutoplay = String(Boolean(opts.autoplayVideo));
+    container.dataset.avatarRequestedSrc = resolvedSrc;
+    if (
+      existing &&
+      existing.dataset.avatarSrc === resolvedSrc &&
+      existing.dataset.avatarAutoplay === nextAutoplay
+    ) {
+      if (existing.tagName === "IMG") existing.alt = alt || "Chatbot";
+      if (existing.tagName === "VIDEO") {
+        existing.setAttribute("aria-label", alt || "Chatbot");
+      }
+      return;
+    }
+    const media = createAvatarMedia(src, alt, options);
+    if (!existing) {
+      mountAvatarMedia(container, existing, indicator, media);
+      return;
+    }
+
+    onAvatarMediaReady(media, function () {
+      if (container.dataset.avatarRequestedSrc !== resolvedSrc) return;
+      mountAvatarMedia(container, existing, indicator, media);
+    });
   }
 
   const launcher = document.createElement("button");
@@ -517,75 +903,430 @@
   const userSubtitle = document.createElement("p");
   userSubtitle.textContent = t("userSubtitle");
 
-  function buildUserField(
-    labelText,
-    type,
-    name,
-    placeholder,
-    required = false
-  ) {
+  function buildUserField(definition) {
     const wrapper = document.createElement("label");
     wrapper.className = "chat-user-field";
     const label = document.createElement("span");
-    label.textContent = labelText;
+    label.textContent = t(definition.labelKey);
     const field = document.createElement("input");
-    field.type = type;
-    field.name = name;
-    field.placeholder = placeholder || "";
-    field.autocomplete = "off";
-    if (required) field.required = true;
+    field.type = definition.type || "text";
+    field.name = definition.key;
+    field.placeholder = definition.placeholder || "";
+    field.autocomplete = definition.autocomplete || "off";
     wrapper.appendChild(label);
     wrapper.appendChild(field);
-    return {wrapper, field};
+    return {definition, wrapper, label, field};
   }
 
   const userForm = document.createElement("form");
   userForm.className = "chat-user-form";
-  const firstField = buildUserField(
-    t("firstNameLabel"),
-    "text",
-    "first_name",
-    "Jane",
-    true
-  );
-  const lastField = buildUserField(
-    t("lastNameLabel"),
-    "text",
-    "last_name",
-    "Doe",
-    true
-  );
-  const emailField = buildUserField(
-    t("emailLabel"),
-    "email",
-    "email",
-    "jane.doe@email.com",
-    true
-  );
-  const defaultPhonePlaceholder = formatDialPlaceholder(null);
-  const phoneField = buildUserField(
-    t("phoneLabel"),
-    "tel",
-    "phone",
-    defaultPhonePlaceholder
-  );
+  userForm.noValidate = true;
+  const userFields = {};
+
+  REGISTRATION_FIELD_DEFINITIONS.forEach(function (definition) {
+    const item = buildUserField(definition);
+    if (definition.fullSpan) item.wrapper.classList.add("full-span");
+    if (definition.addressSearch) {
+      item.wrapper.classList.add("chat-address-search-field");
+    }
+    userFields[definition.key] = item;
+    userForm.appendChild(item.wrapper);
+  });
+
+  const addressSuggestions = document.createElement("div");
+  addressSuggestions.className = "chat-address-suggestions hidden";
+  if (userFields.address) {
+    userFields.address.wrapper.appendChild(addressSuggestions);
+  }
+
   const userError = document.createElement("div");
   userError.className = "chat-user-error";
+  userError.setAttribute("role", "alert");
+  userError.setAttribute("aria-live", "polite");
   const submitUser = document.createElement("button");
   submitUser.type = "submit";
   submitUser.textContent = t("startChat");
 
-  emailField.wrapper.classList.add("full-span");
-  phoneField.wrapper.classList.add("full-span");
   userError.classList.add("full-span");
   submitUser.classList.add("full-span");
 
-  userForm.appendChild(firstField.wrapper);
-  userForm.appendChild(lastField.wrapper);
-  userForm.appendChild(emailField.wrapper);
-  userForm.appendChild(phoneField.wrapper);
   userForm.appendChild(userError);
   userForm.appendChild(submitUser);
+
+  Object.values(userFields).forEach(function (item) {
+    item.field.addEventListener("input", function () {
+      userError.textContent = "";
+      if (item.definition.addressSearch || item.definition.parentKey === "address") {
+        state.user.address_latitude = "";
+        state.user.address_longitude = "";
+        state.user.address_country_code = "";
+        state.user.full_address = "";
+      }
+    });
+  });
+
+  if (userFields.address?.field) {
+    userFields.address.field.addEventListener("input", scheduleAddressSearch);
+    userFields.address.field.addEventListener("focus", scheduleAddressSearch);
+    userFields.address.field.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") clearAddressSuggestions();
+    });
+  }
+
+  function registrationEnabled() {
+    return Boolean(state.registration && state.registration.enabled);
+  }
+
+  function getRegistrationFieldConfig(definitionOrKey) {
+    const definition =
+      typeof definitionOrKey === "string"
+        ? {key: definitionOrKey}
+        : definitionOrKey || {};
+    const configKey = definition.parentKey || definition.key;
+    const baseConfig =
+      state.registration?.fields?.[configKey] || {
+        show: false,
+        required: false,
+      };
+
+    if (definition.parentKey === "address") {
+      return {
+        show: Boolean(baseConfig.show),
+        required:
+          Boolean(baseConfig.required) &&
+          Boolean(definition.requiredWhenParentRequired),
+      };
+    }
+
+    if (definition.addressSearch) {
+      return {
+        show: Boolean(baseConfig.show),
+        required:
+          Boolean(baseConfig.required) &&
+          Boolean(definition.requiredWhenParentRequired),
+      };
+    }
+
+    return baseConfig;
+  }
+
+  function visibleRegistrationFields() {
+    if (!registrationEnabled()) return [];
+    return REGISTRATION_FIELD_DEFINITIONS.filter(function (definition) {
+      return Boolean(getRegistrationFieldConfig(definition).show);
+    });
+  }
+
+  function requiredRegistrationFields() {
+    return visibleRegistrationFields().filter(function (definition) {
+      return Boolean(getRegistrationFieldConfig(definition).required);
+    });
+  }
+
+  function registrationHasVisibleFields() {
+    return visibleRegistrationFields().length > 0;
+  }
+
+  function registrationHasRequiredFields() {
+    return requiredRegistrationFields().length > 0;
+  }
+
+  function registrationRequiredFieldsComplete() {
+    return requiredRegistrationFields().every(function (definition) {
+      return Boolean(String(state.user[definition.key] || "").trim());
+    });
+  }
+
+  function registrationFieldLabel(definition, fieldConfig) {
+    const label = t(definition.labelKey);
+    return fieldConfig.required ? label : `${label} ${t("optionalSuffix")}`.trim();
+  }
+
+  function renderRegistrationFields() {
+    REGISTRATION_FIELD_DEFINITIONS.forEach(function (definition) {
+      const item = userFields[definition.key];
+      if (!item) return;
+      const fieldConfig = getRegistrationFieldConfig(definition);
+      const visible = registrationEnabled() && Boolean(fieldConfig.show);
+
+      item.wrapper.classList.toggle("hidden", !visible);
+      item.label.textContent = registrationFieldLabel(definition, fieldConfig);
+      item.field.required = visible && Boolean(fieldConfig.required);
+      item.field.placeholder = definition.placeholder || "";
+    });
+
+    const phoneField = userFields.phone?.field;
+    if (phoneField && phoneField.dataset.dialPlaceholder) {
+      phoneField.placeholder = phoneField.dataset.dialPlaceholder;
+    }
+
+    if (!getRegistrationFieldConfig("address").show) {
+      clearAddressSuggestions();
+    }
+  }
+
+  let addressSearchTimer = null;
+  let addressSearchController = null;
+
+  function clearAddressSuggestions() {
+    if (addressSearchTimer) {
+      clearTimeout(addressSearchTimer);
+      addressSearchTimer = null;
+    }
+    if (addressSearchController) {
+      addressSearchController.abort();
+      addressSearchController = null;
+    }
+    addressSuggestions.innerHTML = "";
+    addressSuggestions.classList.add("hidden");
+  }
+
+  function addressContextName(context, key) {
+    return String(context?.[key]?.name || "").trim();
+  }
+
+  function addressCountryName(context) {
+    return String(
+      context?.country?.name ||
+        context?.country?.country_name ||
+        context?.country?.country_code ||
+        ""
+    ).trim();
+  }
+
+  function addressCoordinate(feature, key) {
+    const fromProperties = feature?.properties?.coordinates?.[key];
+    if (Number.isFinite(fromProperties)) return fromProperties;
+    const index = key === "longitude" ? 0 : 1;
+    const fromGeometry = feature?.geometry?.coordinates?.[index];
+    return Number.isFinite(fromGeometry) ? fromGeometry : "";
+  }
+
+  function mapboxFeatureToAddress(feature) {
+    const properties = feature?.properties || {};
+    const context = properties.context || {};
+    const addressContext = context.address || {};
+    const addressLine1 = String(
+      properties.address_line1 ||
+        addressContext.name ||
+        properties.name ||
+        ""
+    ).trim();
+    const placeFormatted = String(properties.place_formatted || "").trim();
+    const fullAddress = String(
+      properties.full_address ||
+        [addressLine1, placeFormatted].filter(Boolean).join(", ")
+    ).trim();
+
+    return {
+      address: addressLine1,
+      full_address: fullAddress,
+      address_line2: String(context.secondary_address?.name || "").trim(),
+      city:
+        addressContextName(context, "place") ||
+        addressContextName(context, "locality"),
+      region: addressContextName(context, "region"),
+      postal_code: addressContextName(context, "postcode"),
+      country: addressCountryName(context),
+      country_code: String(context.country?.country_code || "").trim().toUpperCase(),
+      longitude: addressCoordinate(feature, "longitude"),
+      latitude: addressCoordinate(feature, "latitude"),
+    };
+  }
+
+  function setAddressFieldValue(key, value) {
+    if (!userFields[key]) return;
+    const text = String(value || "");
+    userFields[key].field.value = text;
+    state.user[key] = text;
+  }
+
+  function applyAddressSuggestion(feature) {
+    const address = mapboxFeatureToAddress(feature);
+    [
+      "address",
+      "address_line2",
+      "city",
+      "region",
+      "postal_code",
+      "country",
+    ].forEach(function (key) {
+      setAddressFieldValue(key, address[key]);
+    });
+    state.user.address_latitude = address.latitude;
+    state.user.address_longitude = address.longitude;
+    state.user.address_country_code = address.country_code;
+    state.user.full_address = address.full_address;
+    userError.textContent = "";
+    clearAddressSuggestions();
+    focusWithoutPageScroll(userFields.address?.field);
+  }
+
+  function renderAddressSuggestions(features) {
+    addressSuggestions.innerHTML = "";
+
+    if (!features.length) {
+      const empty = document.createElement("div");
+      empty.className = "chat-address-suggestion-empty";
+      empty.textContent = t("addressNoSuggestions");
+      addressSuggestions.appendChild(empty);
+      addressSuggestions.classList.remove("hidden");
+      return;
+    }
+
+    features.forEach(function (feature) {
+      const address = mapboxFeatureToAddress(feature);
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "chat-address-suggestion";
+      option.addEventListener("mousedown", function (event) {
+        event.preventDefault();
+      });
+      option.addEventListener("click", function () {
+        applyAddressSuggestion(feature);
+      });
+
+      const title = document.createElement("span");
+      title.textContent = address.address || address.full_address;
+      const subtitle = document.createElement("small");
+      subtitle.textContent = [
+        address.city,
+        address.region,
+        address.postal_code,
+        address.country,
+      ].filter(Boolean).join(", ");
+
+      option.appendChild(title);
+      option.appendChild(subtitle);
+      addressSuggestions.appendChild(option);
+    });
+
+    addressSuggestions.classList.remove("hidden");
+  }
+
+  function scheduleAddressSearch() {
+    if (!registrationEnabled() || !getRegistrationFieldConfig("address").show) {
+      clearAddressSuggestions();
+      return;
+    }
+
+    if (addressSearchTimer) clearTimeout(addressSearchTimer);
+    const query = userFields.address?.field.value.trim() || "";
+    if (!state.mapboxToken || query.length < 3) {
+      clearAddressSuggestions();
+      return;
+    }
+
+    addressSearchTimer = setTimeout(function () {
+      void fetchAddressSuggestions(query);
+    }, 350);
+  }
+
+  function finiteCoordinate(value, min, max) {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= min && number <= max
+      ? number
+      : null;
+  }
+
+  function hasCoordinateBias() {
+    return (
+      finiteCoordinate(state.tracking.latitude, -90, 90) !== null &&
+      finiteCoordinate(state.tracking.longitude, -180, 180) !== null
+    );
+  }
+
+  function toRadians(value) {
+    return (value * Math.PI) / 180;
+  }
+
+  function distanceMeters(fromLatitude, fromLongitude, toLatitude, toLongitude) {
+    const earthRadiusMeters = 6371000;
+    const deltaLatitude = toRadians(toLatitude - fromLatitude);
+    const deltaLongitude = toRadians(toLongitude - fromLongitude);
+    const startLatitude = toRadians(fromLatitude);
+    const endLatitude = toRadians(toLatitude);
+    const haversine =
+      Math.sin(deltaLatitude / 2) ** 2 +
+      Math.cos(startLatitude) *
+        Math.cos(endLatitude) *
+        Math.sin(deltaLongitude / 2) ** 2;
+
+    return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  }
+
+  function sortAddressFeaturesByDistance(features) {
+    if (!hasCoordinateBias()) return features;
+
+    const fromLatitude = Number(state.tracking.latitude);
+    const fromLongitude = Number(state.tracking.longitude);
+    return [...features].sort(function (left, right) {
+      const leftLatitude = finiteCoordinate(addressCoordinate(left, "latitude"), -90, 90);
+      const leftLongitude = finiteCoordinate(addressCoordinate(left, "longitude"), -180, 180);
+      const rightLatitude = finiteCoordinate(addressCoordinate(right, "latitude"), -90, 90);
+      const rightLongitude = finiteCoordinate(addressCoordinate(right, "longitude"), -180, 180);
+
+      if (leftLatitude === null || leftLongitude === null) return 1;
+      if (rightLatitude === null || rightLongitude === null) return -1;
+
+      return (
+        distanceMeters(fromLatitude, fromLongitude, leftLatitude, leftLongitude) -
+        distanceMeters(fromLatitude, fromLongitude, rightLatitude, rightLongitude)
+      );
+    });
+  }
+
+  async function fetchAddressSuggestions(query) {
+    if (addressSearchController) addressSearchController.abort();
+    const controller = new AbortController();
+    addressSearchController = controller;
+
+    const params = new URLSearchParams({
+      access_token: state.mapboxToken,
+      autocomplete: "true",
+      language: state.lang || "en",
+      limit: "10",
+      permanent: "true",
+      q: query,
+      types: "address",
+    });
+    const latitude = finiteCoordinate(state.tracking.latitude, -90, 90);
+    const longitude = finiteCoordinate(state.tracking.longitude, -180, 180);
+    const countryCode = String(state.tracking.countryCode || "").trim().toLowerCase();
+
+    if (latitude !== null && longitude !== null) {
+      params.set("proximity", `${longitude},${latitude}`);
+    } else {
+      params.set("proximity", "ip");
+    }
+
+    if (/^[a-z]{2}$/.test(countryCode)) {
+      params.set("country", countryCode);
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/search/geocode/v6/forward?${params.toString()}`,
+        {signal: controller.signal}
+      );
+      if (!response.ok) throw new Error(`Mapbox ${response.status}`);
+      const data = await response.json();
+      const features = Array.isArray(data?.features) ? data.features : [];
+      renderAddressSuggestions(sortAddressFeaturesByDistance(features).slice(0, 5));
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      addressSuggestions.innerHTML = "";
+      const message = document.createElement("div");
+      message.className = "chat-address-suggestion-empty";
+      message.textContent = t("addressSuggestionsUnavailable");
+      addressSuggestions.appendChild(message);
+      addressSuggestions.classList.remove("hidden");
+    } finally {
+      if (addressSearchController === controller) {
+        addressSearchController = null;
+      }
+    }
+  }
 
   userCard.appendChild(userTitle);
   userCard.appendChild(userSubtitle);
@@ -602,14 +1343,77 @@
 
   function sanitizeUserPayload(rawUser) {
     if (!rawUser) return null;
+    const addressLine1 = (rawUser.address_line1 || rawUser.address || "").trim();
+    const addressLine2 = (rawUser.address_line2 || "").trim();
+    const city = (rawUser.city || "").trim();
+    const region = (rawUser.region || "").trim();
+    const postalCode = (rawUser.postal_code || "").trim();
+    const country = (rawUser.country || "").trim();
+    const postalCity = [postalCode, city].filter(Boolean).join(" ");
+    const composedAddress = [
+      addressLine1,
+      addressLine2,
+      postalCity,
+      region,
+      country,
+    ].filter(Boolean).join(", ");
     const payload = {
       first_name: (rawUser.first_name || "").trim(),
       last_name: (rawUser.last_name || "").trim(),
       email: (rawUser.email || "").trim(),
       phone: (rawUser.phone || "").trim(),
+      company: (rawUser.company || "").trim(),
+      address: (rawUser.full_address || "").trim() || composedAddress,
+      address_line1: addressLine1,
+      address_line2: addressLine2,
+      city,
+      region,
+      postal_code: postalCode,
+      country,
+      address_latitude: (rawUser.address_latitude || "").toString().trim(),
+      address_longitude: (rawUser.address_longitude || "").toString().trim(),
+      address_country_code: (rawUser.address_country_code || "").toString().trim(),
     };
     const hasData = Object.values(payload).some(Boolean);
     return hasData ? payload : null;
+  }
+
+  function getRegistrationUserPayload() {
+    if (!registrationEnabled()) return null;
+    const rawUser = {};
+
+    visibleRegistrationFields().forEach(function (definition) {
+      rawUser[definition.key] = state.user[definition.key] || "";
+    });
+
+    if (getRegistrationFieldConfig("address").show) {
+      rawUser.address_latitude = state.user.address_latitude || "";
+      rawUser.address_longitude = state.user.address_longitude || "";
+      rawUser.address_country_code = state.user.address_country_code || "";
+      rawUser.full_address = state.user.full_address || "";
+    }
+
+    return sanitizeUserPayload(rawUser);
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function renderRegistrationTemplate(template, userPayload) {
+    let text = String(template || "");
+    const user = userPayload || {};
+
+    REGISTRATION_TEMPLATE_FIELDS.forEach(function (field) {
+      const aliases = field.aliases.map(escapeRegExp).join("|");
+      const pattern = new RegExp(`\\{\\{\\s*(?:${aliases})\\s*\\}\\}`, "gi");
+      text = text.replace(pattern, String(user[field.key] || "").trim());
+    });
+
+    return text
+      .replace(/\{\{\s*[\w.-]+\s*\}\}/g, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
   }
 
   function wait(ms) {
@@ -636,7 +1440,8 @@
 
   function focusCurrentWidgetTarget() {
     if (needsUserDetails()) {
-      focusWithoutPageScroll(firstField.field);
+      const firstVisibleField = visibleRegistrationFields()[0];
+      focusWithoutPageScroll(userFields[firstVisibleField?.key]?.field);
       return;
     }
     if (!input.disabled) {
@@ -664,7 +1469,7 @@
 
   function startNewConversationFlow() {
     if (state.typing) return;
-    const userPayload = sanitizeUserPayload(state.user);
+    const userPayload = getRegistrationUserPayload();
     state.conversation = [];
     state.conversationId = null;
     state.hasStarted = false;
@@ -681,7 +1486,9 @@
 
   function needsUserDetails() {
     if (state.conversationId) return false;
-    return !state.user.first_name || !state.user.last_name || !state.user.email;
+    if (!registrationEnabled() || !registrationHasVisibleFields()) return false;
+    if (!state.registrationCompleted) return true;
+    return registrationHasRequiredFields() && !registrationRequiredFieldsComplete();
   }
 
   function updateInputAvailability() {
@@ -699,13 +1506,15 @@
     const shouldShow = needsUserDetails();
     userOverlay.classList.toggle("hidden", !shouldShow);
     if (shouldShow) {
-      firstField.field.value = state.user.first_name || "";
-      lastField.field.value = state.user.last_name || "";
-      emailField.field.value = state.user.email || "";
-      phoneField.field.value = state.user.phone || "";
+      renderRegistrationFields();
+      REGISTRATION_FIELD_DEFINITIONS.forEach(function (definition) {
+        const item = userFields[definition.key];
+        if (item) item.field.value = state.user[definition.key] || "";
+      });
       userError.textContent = message || "";
       if (shouldFocus) {
-        focusWithoutPageScroll(firstField.field);
+        const firstVisibleField = visibleRegistrationFields()[0];
+        focusWithoutPageScroll(userFields[firstVisibleField?.key]?.field);
       }
     } else {
       userError.textContent = "";
@@ -717,7 +1526,10 @@
     try {
       const dial = await deriveDialCode(rawLocale);
       if (!dial) return;
-      phoneField.field.placeholder = formatDialPlaceholder(dial);
+      if (userFields.phone?.field) {
+        userFields.phone.field.dataset.dialPlaceholder = formatDialPlaceholder(dial);
+      }
+      renderRegistrationFields();
     } catch (_) {
       // ignore placeholder failures
     }
@@ -805,12 +1617,11 @@
   }
 
   async function startIntroConversation(userPayload) {
-    if (state.hasStarted || state.introInProgress || !userPayload) {
+    if (state.hasStarted || state.introInProgress) {
       return;
     }
-    const firstName = (userPayload.first_name || "").trim();
     const openingTemplate = (state.starting || state.greeting || "").trim();
-    const opening = openingTemplate.replace(/\{\{\s*first_name\s*\}\}/gi, firstName);
+    const opening = renderRegistrationTemplate(openingTemplate, userPayload);
 
     state.introInProgress = true;
     state.hasStarted = true;
@@ -1001,7 +1812,7 @@
         },
         source: "widget",
       };
-      const userPayload = sanitizeUserPayload(state.user);
+      const userPayload = getRegistrationUserPayload();
       if (userPayload) payload.user = userPayload;
       console.log("[chat-widget] persistConversation payload", {
         hasConversationId: Boolean(state.conversationId),
@@ -1133,10 +1944,37 @@
       chatbot.starting_message ||
       ds.startingMessage ||
       state.starting;
+    state.registration = normalizeRegistrationConfig(
+      agentData.settings?.registration || chatbot.registration
+    );
+    state.mapboxToken = String(agentData.settings?.mapboxToken || "").trim();
+    const serverTracking = {
+      countryCode: String(agentData.tracking?.countryCode || "").trim().toUpperCase(),
+      latitude: agentData.tracking?.latitude || "",
+      longitude: agentData.tracking?.longitude || "",
+    };
+    state.tracking = {
+      countryCode: state.tracking.countryCode || serverTracking.countryCode,
+      latitude: state.tracking.latitude || serverTracking.latitude,
+      longitude: state.tracking.longitude || serverTracking.longitude,
+      source:
+        state.tracking.source ||
+        (serverTracking.latitude && serverTracking.longitude ? "server" : ""),
+    };
+    if (!registrationEnabled() || !registrationHasVisibleFields()) {
+      state.registrationCompleted = true;
+    } else if (
+      registrationHasRequiredFields() &&
+      registrationRequiredFieldsComplete()
+    ) {
+      state.registrationCompleted = true;
+    }
 
     updateAvatarMediaAll(state.avatar, state.name);
     headerName.textContent = state.name || "Chatbot";
     setColors();
+    renderRegistrationFields();
+    toggleUserOverlay();
     saveConversationCookie();
   }
 
@@ -1148,10 +1986,7 @@
   async function sendMessage(text) {
     if (!text) return;
     if (needsUserDetails()) {
-      toggleUserOverlay(
-        "Please add your name and email to start chatting.",
-        true
-      );
+      toggleUserOverlay(t("registrationRequired"), true);
       return;
     }
     if (!state.hasStarted) state.hasStarted = true;
@@ -1302,17 +2137,41 @@
 
   userForm.addEventListener("submit", function (e) {
     e.preventDefault();
-    const first = firstField.field.value.trim();
-    const last = lastField.field.value.trim();
-    const email = emailField.field.value.trim();
-    const phone = phoneField.field.value.trim();
-
+    const nextUser = {
+      first_name: "",
+      last_name: "",
+      email: "",
+      phone: "",
+      company: "",
+      address: "",
+      address_line1: "",
+      address_line2: "",
+      city: "",
+      region: "",
+      postal_code: "",
+      country: "",
+      address_latitude: state.user.address_latitude || "",
+      address_longitude: state.user.address_longitude || "",
+      address_country_code: state.user.address_country_code || "",
+      full_address: state.user.full_address || "",
+    };
     const errors = [];
-    if (!first) errors.push(t("firstNameRequired"));
-    if (!last) errors.push(t("lastNameRequired"));
-    if (!email) {
-      errors.push(t("emailRequired"));
-    } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+
+    visibleRegistrationFields().forEach(function (definition) {
+      const fieldConfig = getRegistrationFieldConfig(definition);
+      const value = userFields[definition.key].field.value.trim();
+      nextUser[definition.key] = value;
+
+      if (fieldConfig.required && !value) {
+        errors.push(t(definition.requiredKey));
+      }
+    });
+
+    const emailVisible = visibleRegistrationFields().some(function (definition) {
+      return definition.key === "email";
+    });
+    const email = String(nextUser.email || "").trim();
+    if (emailVisible && email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       errors.push(t("emailInvalid"));
     }
 
@@ -1321,17 +2180,13 @@
       return;
     }
 
-    state.user = {
-      first_name: first,
-      last_name: last,
-      email,
-      phone,
-    };
+    state.user = nextUser;
+    state.registrationCompleted = true;
     userError.textContent = "";
     toggleUserOverlay();
     saveConversationCookie();
-    const userPayload = sanitizeUserPayload(state.user);
-    startIntroConversation(userPayload);
+    const userPayload = getRegistrationUserPayload();
+    startIntroConversation(userPayload || {});
     focusWithoutPageScroll(input);
   });
 

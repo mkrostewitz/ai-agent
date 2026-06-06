@@ -2,6 +2,10 @@ import {NextResponse} from "next/server";
 
 import {requireAdminApi} from "@/app/lib/adminAuth";
 import {getDb} from "@/app/lib/mongo";
+import {
+  DEFAULT_REGISTRATION_SETTINGS,
+  normalizeRegistrationSettings,
+} from "@/app/lib/registrationSettings";
 
 export const runtime = "nodejs";
 
@@ -18,6 +22,7 @@ const DEFAULT_SETTINGS = {
   top_k: 40,
   top_p: 0.9,
   max_tokens: 2000,
+  registration: DEFAULT_REGISTRATION_SETTINGS,
 };
 
 function cleanString(value) {
@@ -59,6 +64,7 @@ function normalizeSettings(input = {}) {
         max: 12000,
       })
     ),
+    registration: normalizeRegistrationSettings(input.registration),
   };
 }
 
@@ -73,7 +79,11 @@ export async function GET(request) {
       .findOne({}, {projection: {_id: 0}, sort: {updatedAt: -1, createdAt: -1}});
 
     return NextResponse.json({
-      settings: {...DEFAULT_SETTINGS, ...(doc || {})},
+      settings: {
+        ...DEFAULT_SETTINGS,
+        ...(doc || {}),
+        registration: normalizeRegistrationSettings(doc?.registration),
+      },
     });
   } catch (error) {
     console.error("Admin settings GET error:", error);

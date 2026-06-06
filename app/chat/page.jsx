@@ -17,6 +17,15 @@ const DEFAULT_AGENT = {
   ],
 };
 
+const REGISTRATION_TEMPLATE_FIELDS = [
+  {key: "first_name", aliases: ["FName", "first_name", "firstName"]},
+  {key: "last_name", aliases: ["LName", "last_name", "lastName"]},
+  {key: "phone", aliases: ["Phone", "phone"]},
+  {key: "email", aliases: ["Email", "email"]},
+  {key: "company", aliases: ["Company", "company"]},
+  {key: "address", aliases: ["Address", "address"]},
+];
+
 function normalizeLocale(lang, fallbackLocale = "en") {
   return String(lang || fallbackLocale || "en")
     .slice(0, 2)
@@ -63,6 +72,25 @@ function pickLocalizedText(value, lang, fallbackLocale = "en") {
   return null;
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderRegistrationTemplate(template, userPayload = {}) {
+  let text = String(template || "");
+
+  REGISTRATION_TEMPLATE_FIELDS.forEach((field) => {
+    const aliases = field.aliases.map(escapeRegExp).join("|");
+    const pattern = new RegExp(`\\{\\{\\s*(?:${aliases})\\s*\\}\\}`, "gi");
+    text = text.replace(pattern, String(userPayload[field.key] || "").trim());
+  });
+
+  return text
+    .replace(/\{\{\s*[\w.-]+\s*\}\}/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 function buildIntroContent(agent, lang, fallbackLocale) {
   const intro =
     pickLocalizedText(agent?.starting_message, lang, fallbackLocale) ||
@@ -70,10 +98,7 @@ function buildIntroContent(agent, lang, fallbackLocale) {
     pickLocalizedText(DEFAULT_AGENT.starting_message, lang, fallbackLocale) ||
     "How can I help today?";
 
-  return intro
-    .replace(/\{\{\s*first_name\s*\}\}/gi, "")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
+  return renderRegistrationTemplate(intro);
 }
 
 function createIntroMessage(agent, lang, fallbackLocale) {
@@ -114,6 +139,7 @@ function AgentAvatar({agent}) {
         autoPlay
         loop
         playsInline
+        preload="auto"
         onError={() => setFailed(true)}
       />
     );
@@ -125,6 +151,9 @@ function AgentAvatar({agent}) {
       src={avatar}
       alt={label}
       className="h-8 w-8 rounded-full object-cover bg-gray-700 sm:h-9 sm:w-9"
+      loading="eager"
+      decoding="async"
+      fetchPriority="high"
       onError={() => setFailed(true)}
     />
   );
