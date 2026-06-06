@@ -332,6 +332,14 @@
   outline: none;
   font-size: 14px;
   background: #fff;
+  color: #111827;
+  caret-color: #111827;
+  color-scheme: light;
+}
+
+.chat-widget-input input::placeholder {
+  color: #6b7280;
+  opacity: 1;
 }
 
 .chat-widget-input button {
@@ -503,7 +511,16 @@
   padding: 10px 12px;
   font-size: 14px;
   outline: none;
+  background: #fff;
+  color: #111827;
+  caret-color: #111827;
+  color-scheme: light;
   transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.chat-user-field input::placeholder {
+  color: #6b7280;
+  opacity: 1;
 }
 
 .chat-user-field input:focus {
