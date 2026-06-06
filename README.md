@@ -1,250 +1,352 @@
-# AI Agent (Next.js)
+# Ilysa AI Agent
 
-Single-agent chat widget and demo built with Next.js, Ollama, and MongoDB. Includes an embeddable widget, a demo page, and backend routes for chatbot details, chat streaming, and conversation persistence.
+Ilysa is a single-agent chat widget and admin console built with Next.js,
+MongoDB, and Ollama. It can run locally for development, be embedded into other
+websites as a small script, and be deployed on GPU-backed infrastructure for
+faster local-model inference.
 
-## Prerequisites
+## Features
 
-- Node 18+
-- MongoDB
-- Ollama running with your chosen model (default: `phi3:mini`)
+- Embeddable chat widget with launcher and inline modes.
+- Standalone `/chat` page for testing the agent without embedding it elsewhere.
+- Admin console for the agent profile, colors, bundled or uploaded avatars,
+  localized greetings, starter prompts, model settings, and registration fields.
+- Retrieval-augmented knowledge from uploaded PDFs and indexed website content.
+- Conversation tracking with visitor details, notes, status, action history,
+  request metadata, and optional location enrichment.
+- Optional SMTP notifications for new conversations, with SMTP passwords stored
+  encrypted in MongoDB.
+- Optional IPGeolocation.io and Mapbox integrations for location metadata,
+  address support, and conversation maps.
+- Local filesystem uploads by default, with DigitalOcean Spaces support for
+  production avatars and PDF originals.
+- Docker Compose setups for local development, production, HTTPS, and GPU
+  Ollama deployments.
 
-## Setup
+## Screenshots
 
-1. Install dependencies:
+![Standalone chat interface](./docs/screenshots/standalone-chat.png)
+
+The standalone chat view is useful for validating the agent, prompts, starter
+questions, avatars, and streaming responses before embedding the widget.
+
+![Admin sign-in screen](./docs/screenshots/admin-sign-in.png)
+
+The admin area is protected. After first-run setup, use it to manage the agent,
+knowledge sources, integrations, and stored conversations.
+
+## Tech Stack
+
+- Next.js 14 and React 18
+- MongoDB for app data, conversations, admin configuration, and vector chunks
+- Ollama for local chat and embedding models
+- LangChain for PDF/web document loading and vector storage
+- Nodemailer for optional conversation notification emails
+- Docker Compose for local and production orchestration
+
+## Local Installation
+
+Docker Compose is the recommended local path because it starts MongoDB and
+Ollama with the app and seeds default chatbot/settings documents.
+
+### 1. Prerequisites
+
+- Git
+- Docker Desktop or Docker Engine with Docker Compose
+- A few minutes for the first Ollama model download
+
+No local GPU is required for development. CPU inference works, but responses are
+slower than on a GPU host.
+
+### 2. Clone The Repository
+
+```bash
+git clone YOUR_REPO_URL ai-agent
+cd ai-agent
+```
+
+### 3. Create The Local Docker Environment
+
+Copy the production example and edit it for local development:
+
+```bash
+cp .env.production.example .env.docker
+```
+
+Use simple alphanumeric MongoDB passwords for local setup, or URL-encode the
+password inside `MONGODB_URI` if it contains reserved URL characters.
+
+Minimum local values:
+
+```env
+MONGO_INITDB_ROOT_USERNAME="aiagent_root"
+MONGO_INITDB_ROOT_PASSWORD="localrootpassword"
+MONGO_INITDB_DATABASE="ai-agent"
+MONGO_APP_USERNAME="aiagent_app"
+MONGO_APP_PASSWORD="localapppassword"
+MONGO_RESET_ON_START="false"
+
+MONGODB_URI="mongodb://aiagent_app:localapppassword@mongo:27017/ai-agent?authSource=ai-agent"
+MONGODB_DB="ai-agent"
+MONGODB_INDEX="vector_index"
+MONGODB_DEFAULT_EMBEDDING_COLLECTION="embeddings"
+MONGODB_DEFAULT_QUESTIONS_COLLECTION="defaultQuestions"
+MONGODB_CHATBOT_COLLECTION="chatbot"
+MONGODB_SETTINGS_COLLECTION="settings"
+MONGODB_CONVERSATIONS_COLLECTION="conversations"
+I18N_FALLBACK_LOCALE="en"
+
+APP_ENCRYPTION_KEY="local-development-encryption-secret-change-me"
+APP_BASE_URL="http://localhost:3030"
+APP_DOMAIN="localhost"
+
+OLLAMA_BASE_URL="http://ollama:11434"
+OLLAMA_HOST="http://ollama:11434"
+OLLAMA_MODEL="phi3:mini"
+RAG_TOP_K="6"
+
+FILE_STORAGE_DRIVER="local"
+```
+
+Optional production storage values such as `DIGITALOCEAN_SPACES_*` can stay
+unset when `FILE_STORAGE_DRIVER="local"`.
+
+### 4. Start The Local Stack
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+The first run pulls the default Ollama models, currently `phi3:mini` and
+`nomic-embed-text`. When the server is ready, open:
+
+```text
+http://localhost:3030/admin
+```
+
+### 5. Complete First-Run Setup
+
+The first visit to `/admin` shows setup if no admin user exists. Create the
+first admin account. IPGeolocation.io and Mapbox tokens are optional and can be
+added later in Settings.
+
+After setup, use:
+
+- `/admin` for the protected dashboard.
+- `/chat` for the standalone chat page.
+- `/widget-demo.html` for the protected widget preview and embed snippet.
+
+### 6. Stop The Local Stack
+
+```bash
+docker compose -f docker-compose.dev.yml down
+```
+
+Do not add `-v` unless you intentionally want to delete MongoDB and Ollama
+volumes.
+
+## Manual Local Setup
+
+Use this path only if you already run MongoDB and Ollama locally.
+
+1. Install Node 18+.
+2. Start MongoDB.
+3. Start Ollama and pull the required models:
+
+```bash
+ollama pull phi3:mini
+ollama pull nomic-embed-text
+```
+
+4. Create `.env.local`:
+
+```env
+MONGODB_URI="mongodb://localhost:27017/ai-agent"
+MONGODB_DB="ai-agent"
+MONGODB_INDEX="vector_index"
+MONGODB_DEFAULT_EMBEDDING_COLLECTION="embeddings"
+
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_MODEL="phi3:mini"
+RAG_TOP_K="6"
+
+APP_ENCRYPTION_KEY="local-development-encryption-secret-change-me"
+APP_BASE_URL="http://localhost:3030"
+FILE_STORAGE_DRIVER="local"
+```
+
+5. Install dependencies and start the app:
 
 ```bash
 npm install
-```
-
-2. Configure environment in `.env` (example):
-
-```
-MONGODB_URI=mongodb://USER:PASS@localhost:27017
-MONGODB_DB=ai-agent
-MONGODB_CHATBOT_COLLECTION=chatbot
-MONGODB_SETTINGS_COLLECTION=settings
-MONGODB_CONVERSATIONS_COLLECTION=conversations
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=phi3:mini
-```
-
-If the MongoDB password contains reserved URL characters such as `,`, `:`, `@`,
-`/`, `?`, `#`, or `%`, URL-encode the password inside `MONGODB_URI`.
-
-Admin users, password hashes, the session-signing secret, the optional IPGeolocation.io API key, the Mapbox public token, and mail delivery settings are configured through `/admin` and stored in MongoDB.
-
-For latitude/longitude enrichment, create an IPGeolocation.io API key from the dashboard and save it in first-run setup or Settings. Conversation tracking uses the server-side IP Location API and stores country, city, ASN, timezone, currency, and coordinate fields when available: https://ipgeolocation.io/documentation/ip-location-api.html
-
-For the admin conversation map, create a public Mapbox access token and save it in first-run setup or Settings. The dashboard loads that stored token at runtime instead of using `NEXT_PUBLIC_MAPBOX_TOKEN`.
-
-Mail notification configuration:
-
-```env
-# Used to encrypt stored SMTP passwords. Keep stable across deploys.
-APP_ENCRYPTION_KEY=replace-with-a-long-random-secret
-APP_BASE_URL=https://your-agent-domain.com
-```
-
-The Settings tab includes an Email delivery panel for Apple/iCloud, Gmail,
-Microsoft 365/Outlook, or custom SMTP. The SMTP password is encrypted before it
-is stored in the `app_config` MongoDB document; it is not hashable because the
-server must decrypt it later to authenticate with the mail provider. Use
-provider app passwords or SMTP authentication credentials, not your normal
-account password where the provider requires an app-specific password.
-
-Environment variables such as `MAIL_PROVIDER`, `SMTP_USER`, `SMTP_PASS`,
-`MAIL_FROM`, and `MAIL_TO` are still supported as a fallback before mail is
-saved from the Admin UI, but the intended production path is encrypted MongoDB
-storage through `/admin`.
-
-Optional file storage configuration:
-
-```
-# Default: local filesystem storage.
-FILE_STORAGE_DRIVER=local
-
-# DigitalOcean Spaces storage for avatars and uploaded CV/PDF originals.
-# Keep the app, MongoDB, Ollama, and Space in the same region when possible.
-FILE_STORAGE_DRIVER=digitalocean-spaces
-DIGITALOCEAN_SPACES_REGION=fra1
-DIGITALOCEAN_SPACES_BUCKET=your-space-name
-DIGITALOCEAN_SPACES_KEY=your-access-key
-DIGITALOCEAN_SPACES_SECRET=your-secret-key
-DIGITALOCEAN_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
-DIGITALOCEAN_SPACES_PUBLIC_URL=https://your-space-name.fra1.digitaloceanspaces.com
-```
-
-Aliases `STORAGE_DRIVER`, `DO_SPACES_REGION`, `DO_SPACES_BUCKET`, `DO_SPACES_KEY`, `DO_SPACES_SECRET`, `DO_SPACES_ENDPOINT`, and `DO_SPACES_PUBLIC_URL` are also supported.
-
-With local storage, public avatars are stored under `public/uploads/avatars` and private uploaded PDF originals under `storage/uploads/documents`. The production Docker Compose file mounts both upload roots as named volumes. With DigitalOcean Spaces, avatars are uploaded as public objects and PDF originals as private objects; MongoDB stores the profile URL plus vector chunks and storage keys, not the raw avatar/PDF bytes.
-
-3. Seed defaults (via docker entrypoint or manually):
-   - `chatbot` collection: one document with name/colors/avatar/greeting/starting_message (localized arrays or maps).
-   - `settings` collection: instruction + model params (temperature, top_k, top_p, max_tokens).
-4. Run dev server:
-
-```bash
 npm run dev
 ```
 
-Visit `http://localhost:3030`.
+6. Open `http://localhost:3030/admin` and complete setup.
 
-## Admin UI
+On a completely empty manual MongoDB database, sign in and save the Agent and
+Settings pages once so the public widget has initial chatbot/settings documents.
+The Docker setup does this seeding automatically.
 
-Use one admin entry point:
+## Admin Workflow
 
-```bash
-/admin
+The admin dashboard has four main sections:
+
+- Agent: profile name, avatar, colors, localized greetings, starter messages,
+  default prompts, registration fields, model settings, and embed snippet.
+- Settings: system integrations, IPGeolocation.io key, Mapbox token, and mail
+  delivery settings.
+- Knowledge: upload PDFs, index website URLs, assign namespaces, refresh
+  sources, and delete indexed sources.
+- Conversations: review conversations, update status, add notes/actions, inspect
+  visitor metadata, and view coordinates on a map when available.
+
+The first-run setup stores the admin password as a hash, generates a server-side
+session secret, and stores optional integration keys in MongoDB.
+
+## Embedding The Widget
+
+The admin dashboard can generate the embed snippet for you. The simplest
+launcher snippet looks like this:
+
+```html
+<script async src="https://your-agent-domain.com/scripts/chat-widget.js"></script>
 ```
 
-`/admin` decides what to show based on MongoDB state. If setup is incomplete, it shows first-run setup. If setup is complete and no admin session exists, it shows sign-in. If an admin session exists, it shows the dashboard.
+For an inline widget:
 
-The first-run setup creates the first admin user, stores the password as a hash in MongoDB, generates the server-side session secret, and saves the optional IPGeolocation.io API key.
-
-It lets an admin manage:
-
-- Agent profile: name, bundled or uploaded image/MP4 avatar, colors, localized greetings, and starting messages.
-- Agent settings: instructions, model, temperature, top-k/top-p, max tokens, retrieval namespace, and retrieval count.
-- System integrations: IPGeolocation.io API key setup/replacement/clearing, Mapbox public token setup/replacement/clearing, and mail delivery settings/status.
-- Knowledge: upload PDFs, RAG website URLs on demand, list indexed sources, and delete indexed sources.
-- Conversations: review user conversations, status/notes/actions, IP/location metadata, and a location map when coordinates are available.
-
-The IPGeolocation.io key enables city/country/coordinate enrichment for widget conversations. Without it, the app still stores request headers such as user agent/referrer and any proxy-provided country code.
-
-When mail is configured, `/api/agents/conversations/create` sends a best-effort
-notification email for each new stored conversation. Delivery errors are logged
-server-side and do not prevent the conversation from being saved.
-
-Protected routes:
-
-- `/admin`
-- `/api/admin/*`
-- `/api/embed/*`
-- `/widget-demo.html`
-
-Public routes needed by external embedded widgets remain public, including `/scripts/chat-widget.js`, `/styles/chat-widget.css`, `/api/agents/details`, `/api/agents/chat/stream`, and conversation persistence APIs.
-
-## Key Routes
-
-- `GET /api/agents/details`  
-  Loads the single chatbot config from Mongo (`chatbot` collection). Returns `data.chatbot` and `agent.name`.
-
-- `POST /api/agents/chat/stream`  
-  Streams OpenAI-style SSE (`data: {choices:[{delta:{content}}]}`) using Ollama. Builds prompt from `messages` and `instruction`/settings in Mongo `settings` collection. Query/body: `{ messages: [{role, content}, ...] }`.
-
-- `POST /api/agents/conversations/create`  
-  Creates a conversation in Mongo `conversations` collection. Body: `{ conversation, user?, metadata?, source? }`. Returns `data.conversation_id`.
-
-- `PUT /api/agents/conversations/update`  
-  Appends messages and updates user/metadata for a given `conversation_id`.
-
-- `GET /api/agents/conversations/details?conversation_id=...`  
-  Returns stored messages, metadata, and user for a conversation.
-
-- `POST /api/embed/pdf`  
-  Stores uploaded PDF originals through the configured file storage backend, then embeds parsed chunks into the MongoDB vector store (multipart or base64).
-
-- `POST /api/embed/url`  
-  Fetches and embeds website text (http/https URL) into the same vector store. Body: `{ url: "https://...", namespace? }` or `{ urls: ["..."], namespace? }`.
-
-Admin routes:
-
-- `GET|POST /api/admin/setup`
-- `POST /api/admin/auth/login`
-- `POST /api/admin/auth/logout`
-- `GET|PUT /api/admin/agent`
-- `GET|PUT /api/admin/settings`
-- `GET|PUT /api/admin/system`
-- `POST /api/admin/system/test-email`
-- `GET|POST /api/admin/storage`
-- `POST /api/admin/avatar`
-- `GET|DELETE /api/admin/documents`
-- `GET /api/admin/conversations`
-- `PATCH|DELETE /api/admin/conversations/:conversationId`
-
-## Widget & Demo
-
-- `public/scripts/chat-widget.js`: embeddable widget that:
-  - Fetches chatbot details from `/api/agents/details`.
-  - Streams replies from `/api/agents/chat/stream`.
-  - Persists conversations via `/api/agents/conversations/{create,update,details}` with a cookie for conversation id/user info.
-  - Supports `data-lang` override; if omitted, uses browser language.
-- `/widget-demo.html`: protected admin-only widget demo that showcases the widget and generates an embed snippet. The language dropdown includes a “Browser Language” option; selecting it removes `data-lang` from the snippet so browser locale is used.
-
-## Static Data
-
-- `public/data/CountryData.json` and `public/data/LanguagesData.json` support phone placeholders and language selection in the widget/demo.
-- Translations for the widget and demo live under `public/locales/{en,de,it}/translation.json`.
-
-## Running Notes
-
-- Widget avatar defaults to `/avatars/Michael_Intro.mp4`; can be overridden via Mongo `chatbot.avatar` or `data-avatar`.
-- Conversation cookie: `intu_chat_conversation` stores `conversation_id`, `lang` (unless forced by `data-lang`), and user details for continuity.
-
-## DigitalOcean GPU Docker Deployment
-
-Detailed setup instructions live in [DEPLOY_DIGITALOCEAN_GPU.md](./DEPLOY_DIGITALOCEAN_GPU.md).
-
-Recommended Droplet choices:
-
-- Image: `OS` -> `AI/ML Ready` for NVIDIA.
-- GPU platform: `NVIDIA`.
-- GPU plan: `RTX 4000 ADA` with 20 GB VRAM.
-- Skip `1-click Models`; this repo pulls Ollama models through Docker Compose.
-- Add an SSH key and protect the Droplet with a Cloud Firewall.
-
-Prepare the Droplet once:
-
-```bash
-nvidia-smi
-docker --version
-docker compose version
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```html
+<div id="agent-chat-widget"></div>
+<script
+  async
+  src="https://your-agent-domain.com/scripts/chat-widget.js"
+  data-mode="embedded"
+  data-mount="#agent-chat-widget"
+></script>
 ```
 
-Clone the repo on the Droplet and create the production env file:
+Useful attributes:
 
-```bash
-git clone YOUR_REPO_URL /opt/ai-agent
-cd /opt/ai-agent
-cp .env.production.example .env.docker
-nano .env.docker
+- `data-lang="en"` forces a language. If omitted, the widget uses the browser
+  language when supported.
+- `data-mode="embedded"` renders inline instead of as a bottom-corner launcher.
+- `data-mount="#agent-chat-widget"` controls where inline mode mounts.
+
+Public widget assets and APIs include `/scripts/chat-widget.js`,
+`/styles/chat-widget.css`, `/api/agents/details`,
+`/api/agents/chat/stream`, and the conversation persistence routes.
+
+## Optional Integrations
+
+### IPGeolocation.io
+
+Add an IPGeolocation.io API key during setup or in Settings to enrich
+conversations with country, city, ASN, timezone, currency, latitude, and
+longitude when available.
+
+### Mapbox
+
+Add a public Mapbox token for address support and the admin conversation map.
+The token is stored server-side in MongoDB and exposed only where the widget or
+admin map needs it.
+
+### Mail Notifications
+
+Set a stable `APP_ENCRYPTION_KEY`, then configure Apple/iCloud, Gmail,
+Microsoft 365/Outlook, or custom SMTP from the Settings page. SMTP passwords are
+encrypted before they are stored in MongoDB.
+
+Environment variables such as `MAIL_PROVIDER`, `SMTP_USER`, `SMTP_PASS`,
+`MAIL_FROM`, and `MAIL_TO` still work as fallback defaults, but the intended
+production path is encrypted storage through `/admin`.
+
+### File Storage
+
+Use local storage for development:
+
+```env
+FILE_STORAGE_DRIVER="local"
 ```
 
-Use the regular compose file plus the GPU override:
+For production, DigitalOcean Spaces is supported:
+
+```env
+FILE_STORAGE_DRIVER="digitalocean-spaces"
+DIGITALOCEAN_SPACES_REGION="fra1"
+DIGITALOCEAN_SPACES_BUCKET="your-space-name"
+DIGITALOCEAN_SPACES_KEY="your-access-key"
+DIGITALOCEAN_SPACES_SECRET="your-secret-key"
+DIGITALOCEAN_SPACES_ENDPOINT="https://fra1.digitaloceanspaces.com"
+DIGITALOCEAN_SPACES_PUBLIC_URL="https://your-space-name.fra1.digitaloceanspaces.com"
+```
+
+With local storage, public avatars are stored under `public/uploads/avatars` and
+private PDF originals under `storage/uploads/documents`.
+
+## Hosted GPU Option
+
+I also provide a managed hosting option on my own GPU-backed environment. This
+is intended for people who want the agent running without managing Docker,
+Ollama, model downloads, MongoDB, HTTPS, backups, or updates themselves.
+
+Reach out to me directly with questions, local setup issues, or to discuss a
+hosted GPU setup.
+
+## Self-Hosted GPU Deployment
+
+For a self-managed production deployment on a DigitalOcean GPU Droplet, use:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
-If `APP_DOMAIN` points at the Droplet and `.env.docker` has
-`APP_BASE_URL="https://..."`, include the Caddy HTTPS override:
+If `APP_DOMAIN` points at the server and `APP_BASE_URL` uses HTTPS, include the
+Caddy override:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.https.yml up -d --build
 ```
 
-The GPU override keeps up to two requests per loaded model active, keeps two
-models loaded when VRAM allows it, enables Flash Attention, and pulls
-`phi3:mini`, `nomic-embed-text`, and `llama3.1:8b` for app-specific model
-selection.
+The GPU override enables NVIDIA GPU reservations for Ollama, Flash Attention,
+and pulls `phi3:mini`, `nomic-embed-text`, and `llama3.1:8b`.
 
-Verify after startup:
+Detailed production steps are in
+[DEPLOY_DIGITALOCEAN_GPU.md](./DEPLOY_DIGITALOCEAN_GPU.md).
 
-```bash
-docker compose ps
-docker compose logs -f ollama
-docker compose exec ollama ollama ps
-```
-
-`ollama ps` should show the active chat model using GPU, not `100% CPU`.
-
-For redeploys:
+## Development Commands
 
 ```bash
-cd /opt/ai-agent
-git pull
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+npm run dev      # Next.js dev server on port 3030
+npm run build    # Production build
+npm run start    # Production server on port 3030
 ```
 
-For HTTPS deployments, include `docker-compose.https.yml` in the same command.
+## Key Routes
+
+- `GET /api/agents/details`: load public chatbot profile and widget settings.
+- `POST /api/agents/chat/stream`: stream Ollama responses as SSE.
+- `POST /api/agents/conversations/create`: create a stored conversation.
+- `PUT /api/agents/conversations/update`: append messages and metadata.
+- `GET /api/agents/conversations/details`: load a stored conversation.
+- `POST /api/embed/pdf`: embed uploaded PDF content.
+- `POST /api/embed/url`: embed website content.
+- `GET|POST /api/admin/setup`: first-run setup state and creation.
+- `GET|PUT /api/admin/agent`: admin agent profile.
+- `GET|PUT /api/admin/settings`: admin model and registration settings.
+- `GET|PUT /api/admin/system`: admin integration settings.
+- `GET /api/admin/conversations`: admin conversation list.
+
+Protected routes include `/admin`, `/api/admin/*`, `/api/embed/*`, and
+`/widget-demo.html`.
+
+## Troubleshooting
+
+- `Invalid MONGODB_URI`: URL-encode the MongoDB password inside `MONGODB_URI`,
+  or use simple alphanumeric passwords locally.
+- Setup says MongoDB is unavailable: check `.env.docker`, then run
+  `docker compose -f docker-compose.dev.yml logs mongo`.
+- First startup is slow: Ollama is downloading models into its Docker volume.
+- Widget says no chatbot document exists: on manual MongoDB setup, save the
+  Agent page once in `/admin`, or use the Docker setup that seeds defaults.
+- GPU deployment still uses CPU: run
+  `docker compose exec ollama ollama ps` and verify the model processor is GPU.
