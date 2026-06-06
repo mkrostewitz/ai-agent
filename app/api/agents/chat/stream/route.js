@@ -87,9 +87,11 @@ function buildStandardInstruction(profile, instruction) {
     "Do not skip from a current role to much older roles when newer intermediate roles are present in the context.",
     "When an older snippet groups several roles, cite only the newest role from that group in concise summaries; name older employers from that group only when explicitly requested.",
     "Do not infer subsidiary, acquisition, ownership, or transformation relationships between companies unless the context explicitly says so.",
+    "Do not describe customers, reference projects, partners, or prospects as employers or held roles unless the context explicitly says they were employers or roles.",
     "If snippets conflict, prefer the current or latest dated information; if recency cannot be determined, say that the context does not clearly identify the latest role.",
     "Never answer as a different person named in copied or default instructions.",
     "Keep answers concise, professional, and natural.",
+    "Write in short, readable sentences and avoid long unbroken text blocks. Use Markdown paragraph breaks after every 2-3 sentences, and use concise bullet lists when an answer has several separate points.",
     adminInstruction,
   ]
     .filter((line) => line !== "")
@@ -569,7 +571,7 @@ async function retrieveContext(question, namespace, retrievalK) {
     });
 
     if (contexts.length === 0) {
-      return retrieveContextWithLocalCosine(
+      return await retrieveContextWithLocalCosine(
         collection,
         question,
         namespace,
@@ -588,7 +590,7 @@ async function retrieveContext(question, namespace, retrievalK) {
           namespace: namespace || null,
         }
       );
-      return retrieveContextWithLocalCosine(
+      return await retrieveContextWithLocalCosine(
         collection,
         question,
         namespace,
@@ -660,6 +662,14 @@ export async function POST(req) {
       responseLang: responseLang || null,
       questionPreview: question.slice(0, 120),
     });
+
+    if (
+      isIdentityQuestion(question) &&
+      !isProfessionalBackgroundQuestion(question) &&
+      profile?.fullName
+    ) {
+      return createSseTextResponse(identityForLang(responseLang, profile));
+    }
 
     const retrieval = await retrieveContext(question, namespace, retrievalK);
     const contexts = rankContexts(question, retrieval.contexts || []);
