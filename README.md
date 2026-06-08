@@ -25,15 +25,25 @@ faster local-model inference.
 
 ## Screenshots
 
-![Standalone chat interface](./docs/screenshots/standalone-chat.png)
+<img src="./docs/screenshots/standalone-chat.png" alt="Standalone chat interface" width="100%">
 
 The standalone chat view is useful for validating the agent, prompts, starter
 questions, avatars, and streaming responses before embedding the widget.
 
-![Admin sign-in screen](./docs/screenshots/admin-sign-in.png)
+<img src="./docs/screenshots/admin-sign-in.png" alt="Admin sign-in screen" width="100%">
 
 The admin area is protected. After first-run setup, use it to manage the agent,
 knowledge sources, integrations, and stored conversations.
+
+<img src="./docs/screenshots/admin-agent-settings.png" alt="Admin agent settings panel" width="100%">
+
+The Agent settings panel controls the system prompt, model runtime parameters,
+retrieval behavior, and visitor registration fields.
+
+<img src="./docs/screenshots/admin-system-settings.png" alt="Admin system settings and integrations" width="100%">
+
+The Settings tab manages theme colors, location integrations, map support, and
+email delivery.
 
 ## Tech Stack
 
@@ -203,6 +213,53 @@ The admin dashboard has four main sections:
 
 The first-run setup stores the admin password as a hash, generates a server-side
 session secret, and stores optional integration keys in MongoDB.
+
+## Admin Settings
+
+The admin UI separates day-to-day agent behavior from system integrations.
+
+### Agent Settings
+
+The Agent tab starts with the model and prompt controls:
+
+- Instructions: the system prompt sent to the model. Use this to define tone,
+  source-of-truth rules, answer style, and business-specific constraints.
+- Model: the Ollama chat model used for responses. The default is `phi3:mini`;
+  production GPU deployments can also pull and select larger models such as
+  `llama3.1:8b`.
+- Namespace: limits retrieval to one indexed knowledge namespace. Leave it as
+  `All namespaces` when the agent should search every uploaded PDF and website
+  source.
+- Retrieval K: number of knowledge chunks considered for each answer.
+- Temperature: controls response variability. Lower values are more stable;
+  higher values are more creative.
+- Top P and Top K: sampling controls for narrowing or widening candidate tokens.
+- Max tokens: upper bound for generated answer length.
+- Visitor registration: controls whether the widget asks for visitor details
+  before chat and which fields are shown or required.
+
+<img src="./docs/screenshots/admin-agent-settings.png" alt="Admin agent settings panel" width="100%">
+
+### System Settings
+
+The Settings tab covers integrations and operational settings:
+
+- Theme Colors: controls the widget's primary, secondary, and button colors.
+- IPGeolocation.io: optional server-side API key for enriching conversations
+  with city, country, ASN, timezone, currency, latitude, and longitude.
+- Mapbox: optional public token for address support and conversation maps.
+- Email delivery: SMTP configuration for new conversation notifications. It
+  supports Apple/iCloud, Gmail, Microsoft 365/Outlook, custom SMTP, or disabled
+  mode.
+
+<img src="./docs/screenshots/admin-system-settings.png" alt="Admin system settings and integrations" width="100%">
+
+Email passwords are encrypted before they are stored in MongoDB. Use provider
+app passwords where required, not a normal account password. The Send test
+button verifies the current settings before you rely on production
+notifications.
+
+<img src="./docs/screenshots/admin-email-settings.png" alt="Admin email delivery settings" width="100%">
 
 ## Embedding The Widget
 
