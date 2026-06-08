@@ -82,7 +82,8 @@ function buildStandardInstruction(profile, instruction) {
     lastNameLine,
     "",
     "Use uploaded CVs, resumes, and indexed website data as the source of truth for the person's professional background.",
-    "For background, career, current-role, and experience questions, answer in reverse chronological order: current/latest positions first, then the next most recent roles.",
+    "For background, career, and experience questions, answer in reverse chronological order: current/latest positions first, then the next most recent roles.",
+    "For current-role, current-engagement, current-activity, or current-focus questions, answer only with the current/latest engagement. Do not include previous roles unless the user explicitly asks for background, career history, or experience.",
     "For broad background questions, include the current/latest organization(s) plus the next three distinct prior organizations when they are present in the CV context.",
     "Do not skip from a current role to much older roles when newer intermediate roles are present in the context.",
     "When an older snippet groups several roles, cite only the newest role from that group in concise summaries; name older employers from that group only when explicitly requested.",
@@ -91,6 +92,7 @@ function buildStandardInstruction(profile, instruction) {
     "If snippets conflict, prefer the current or latest dated information; if recency cannot be determined, say that the context does not clearly identify the latest role.",
     "Never answer as a different person named in copied or default instructions.",
     "Keep answers concise, professional, and natural.",
+    "For narrow factual questions, default to 1-2 short sentences. Add more detail only when the user asks for an overview, list, background, career history, or comparison.",
     "Write in short, readable sentences and avoid long unbroken text blocks. Use Markdown paragraph breaks after every 2-3 sentences, and use concise bullet lists when an answer has several separate points.",
     adminInstruction,
   ]
@@ -126,16 +128,19 @@ function buildPrompt(question, instruction, contexts, responseLang, profile) {
       ? `- Always respond in this language: ${responseLang}.`
       : "- Respond in the same language as the user question.",
     "- If a UI language hint conflicts with the user's question language, prioritize the user's question language.",
+    "- Answer the question directly. Do not repeat the user question, and do not include prompt labels such as \"User question:\" or \"Assistant:\".",
     "- If the answer is not in context, answer exactly: \"I don't know based on the provided context.\"",
     "- Do not invent facts, names, dates, or background details.",
+    "- For narrow factual answers, use 1-2 short sentences by default.",
+    "- For questions about the current engagement, current role, current activity, current focus, or \"aktuelles Engagement\", answer only the current/latest engagement and omit older roles.",
     "- For professional summaries, prioritize the current/latest context before older career history.",
     "- For broad background answers, name the current/latest organization(s), then the next three distinct prior organizations from the CV context if available.",
     "",
     "Context snippets:",
     contextBlock,
     "",
-    `User question: ${question}`,
-    "Assistant:",
+    "Answer this question directly, without repeating it:",
+    question,
   ].join("\n");
 }
 
@@ -234,14 +239,7 @@ function createSseTextResponse(text) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
-      const payload = {
-        choices: [
-          {
-            delta: {content: text},
-          },
-        ],
-      };
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      enqueueSseDelta(controller, encoder, text);
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       controller.close();
     },
@@ -255,6 +253,62 @@ function createSseTextResponse(text) {
       },
     })
   );
+}
+
+function enqueueSseDelta(controller, encoder, content) {
+  const payload = {
+    choices: [
+      {
+        delta: {content},
+      },
+    ],
+  };
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function looseTextPattern(value) {
+  return escapeRegExp(value).trim().replace(/\s+/g, "\\s+");
+}
+
+function stripPromptEcho(answer, question) {
+  let cleaned = String(answer || "").replace(/\r\n/g, "\n").trim();
+  const questionPattern = looseTextPattern(question);
+  const labelPattern =
+    "(?:User question|Question|Asked question|Prompt|Frage|Nutzerfrage|Benutzerfrage)";
+
+  if (questionPattern) {
+    const labeledQuestionAtStart = new RegExp(
+      `^\\s*${labelPattern}\\s*:\\s*${questionPattern}\\s*(?:\\n+|$)`,
+      "i"
+    );
+    const labeledQuestionAtEnd = new RegExp(
+      `(?:\\n\\s*)*${labelPattern}\\s*:\\s*${questionPattern}\\s*$`,
+      "i"
+    );
+    const bareQuestionAtStart = new RegExp(
+      `^\\s*${questionPattern}\\s*(?:\\n+|$)`,
+      "i"
+    );
+    const bareQuestionAtEnd = new RegExp(
+      `(?:\\n\\s*)+${questionPattern}\\s*$`,
+      "i"
+    );
+
+    cleaned = cleaned
+      .replace(labeledQuestionAtStart, "")
+      .replace(labeledQuestionAtEnd, "")
+      .replace(bareQuestionAtStart, "")
+      .replace(bareQuestionAtEnd, "")
+      .trim();
+  }
+
+  return cleaned
+    .replace(/(?:\n\s*)*(?:Assistant|Assistent|Antwort|Answer)\s*:\s*$/i, "")
+    .trim();
 }
 
 function getLatestUserQuestion(messages = []) {
@@ -718,17 +772,30 @@ export async function POST(req) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          const promptEchoTailLength = Math.max(240, question.length + 120);
+          let answer = "";
+          let pending = "";
+          let sentContent = false;
+          const sendContent = (content) => {
+            if (!content) return;
+            enqueueSseDelta(controller, encoder, content);
+            sentContent = true;
+          };
+
           for await (const chunk of await model.stream(prompt)) {
-            const payload = {
-              choices: [
-                {
-                  delta: {content: chunk},
-                },
-              ],
-            };
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(payload)}\n\n`)
-            );
+            const text = String(chunk || "");
+            answer += text;
+            pending += text;
+
+            if (pending.length > promptEchoTailLength) {
+              const flushLength = pending.length - promptEchoTailLength;
+              sendContent(pending.slice(0, flushLength));
+              pending = pending.slice(flushLength);
+            }
+          }
+          sendContent(stripPromptEcho(pending, question));
+          if (!sentContent && answer.trim()) {
+            sendContent(stripPromptEcho(answer, question) || fallbackForLang(responseLang));
           }
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
