@@ -899,6 +899,7 @@
 .settingsGrid,
 .colorGrid,
 .sliderGrid,
+.ownerProfileGrid,
 .localizedGrid,
 .statsGrid,
 .filterRow {
@@ -995,7 +996,8 @@
 }
 
 .colorGrid,
-.sliderGrid {
+.sliderGrid,
+.ownerProfileGrid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -1210,6 +1212,235 @@
   font-size: 0.82rem;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.usageMetricGrid,
+.usageDashboardGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.usageMetricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.usageDashboardGrid {
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
+  align-items: start;
+}
+
+.usageMetric,
+.usagePanel {
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #f8fafb;
+}
+
+.usageMetric {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+}
+
+.usageMetric span,
+.usagePanelMeta,
+.usageSourceGrid span {
+  color: #657482;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.usageMetric strong {
+  color: #14212b;
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1.1;
+}
+
+.usageMetric small {
+  color: #51616f;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.usagePanel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.usageSplitBar {
+  height: 18px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid #d8e0e6;
+  border-radius: 999px;
+  background: #e5eaee;
+}
+
+.usageSplitBar span {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.usageSplitUser {
+  background: #0f766e;
+}
+
+.usageSplitAssistant {
+  background: #253541;
+}
+
+.usageLegend {
+  display: flex;
+  align-items: center;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+}
+
+.usageLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #253541;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.usageLegend i {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.usageLegendUser {
+  background: #0f766e;
+}
+
+.usageLegendAssistant {
+  background: #253541;
+}
+
+.usageSourceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.usageSourceGrid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.usageSourceGrid strong {
+  color: #14212b;
+  font-size: 1.1rem;
+}
+
+.usageMonthList {
+  display: grid;
+  gap: 10px;
+}
+
+.usageMonthRow {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 96px;
+  gap: 12px;
+  align-items: center;
+  color: #253541;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.usageMonthRow > span,
+.usageMonthRow > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.usageMonthRow > strong {
+  text-align: right;
+}
+
+.usageMonthTrack {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5eaee;
+}
+
+.usageMonthTrack i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f766e;
+}
+
+.usageConversationTable {
+  overflow: hidden;
+  border: 1px solid #d8e0e6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.usageConversationHeader,
+.usageConversationRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 0.8fr) 110px 170px;
+  gap: 12px;
+  align-items: center;
+}
+
+.usageConversationHeader {
+  border-bottom: 1px solid #d8e0e6;
+  padding: 10px 12px;
+  background: #eef2f4;
+  color: #51616f;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.usageConversationRow {
+  border-bottom: 1px solid #e5eaee;
+  padding: 12px;
+  color: #253541;
+  font-size: 0.88rem;
+}
+
+.usageConversationRow:last-child {
+  border-bottom: 0;
+}
+
+.usageConversationRow > span,
+.usageConversationTitle {
+  min-width: 0;
+}
+
+.usageConversationRow > span,
+.usageConversationTitle {
+  display: grid;
+  gap: 4px;
+}
+
+.usageConversationRow strong,
+.usageConversationRow small,
+.usageConversationRow > span {
+  overflow-wrap: anywhere;
+}
+
+.usageConversationRow small {
+  color: #657482;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .conversationWorkspace {
@@ -2029,8 +2260,10 @@
   .setupGrid,
   .colorGrid,
   .sliderGrid,
+  .ownerProfileGrid,
   .localizedGrid,
   .promptTranslationGrid,
+  .usageMetricGrid,
   .statsGrid,
   .mailAccountGrid,
   .mailServerGrid,
@@ -2039,7 +2272,8 @@
   }
 
   .twoColumn,
-  .conversationWorkspace {
+  .conversationWorkspace,
+  .usageDashboardGrid {
     grid-template-columns: 1fr;
   }
 
@@ -2059,13 +2293,23 @@
     display: none;
   }
 
+  .usageConversationHeader {
+    display: none;
+  }
+
   .conversationListRow {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .usageConversationRow {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  }
+
   .conversationMessageSummary,
   .conversationActivityPreview,
-  .conversationTime {
+  .conversationTime,
+  .usageConversationRow > span:nth-child(3),
+  .usageConversationRow > span:nth-child(4) {
     grid-column: 1 / -1;
   }
 
@@ -2143,6 +2387,7 @@
   .setupGrid,
   .colorGrid,
   .sliderGrid,
+  .ownerProfileGrid,
   .localizedGrid,
   .promptTranslationGrid,
   .statsGrid,
@@ -2150,6 +2395,9 @@
   .mailServerGrid,
   .filterRow,
   .conversationFilterRow,
+  .usageMetricGrid,
+  .usageDashboardGrid,
+  .usageSourceGrid,
   .conversationDetailGrid,
   .conversationTrackingGrid,
   .conversationManageGrid,
@@ -2162,6 +2410,15 @@
 
   .segmentedControl {
     grid-template-columns: 1fr;
+  }
+
+  .usageMonthRow,
+  .usageConversationRow {
+    grid-template-columns: 1fr;
+  }
+
+  .usageMonthRow > strong {
+    text-align: left;
   }
 
   .panel {
@@ -2301,6 +2558,9 @@
 .setupNote,
 .agentSettingsPanel,
 .integrationPanel,
+.usageMetric,
+.usagePanel,
+.usageConversationTable,
 .modalPanel,
 .embedAgentSummary,
 .segmentedControl {
@@ -2325,6 +2585,8 @@
 .conversationActivityComposer,
 .conversationTranscriptSection,
 .tableShell,
+.usageMetric,
+.usagePanel,
 .embedAgentSummary,
 .segmentedControl {
   background: rgba(255, 255, 255, 0.76);
@@ -2398,6 +2660,11 @@
 .conversationActionMeta span,
 .agentPreviewHeader span,
 .embedAgentSummary span,
+.usageMetric span,
+.usageMetric small,
+.usagePanelMeta,
+.usageSourceGrid span,
+.usageConversationRow small,
 .stat span {
   color: var(--subtext);
 }
@@ -2421,6 +2688,9 @@
 .conversationActionItem p,
 .conversationActionEmpty,
 .locationBand,
+.usageMetric strong,
+.usageSourceGrid strong,
+.usageConversationRow,
 .stat strong {
   color: var(--text);
 }
@@ -2588,8 +2858,41 @@
   color: #2c1c52;
 }
 
+.usageConversationHeader {
+  border-bottom-color: var(--card-border);
+  background: var(--brand-muted);
+  color: #2c1c52;
+}
+
 .documentRow {
   border-bottom-color: rgba(88, 26, 208, 0.08);
+}
+
+.usageConversationRow {
+  border-bottom-color: rgba(88, 26, 208, 0.08);
+}
+
+.usageSourceGrid div,
+.usageConversationTable {
+  border-color: var(--card-border);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.usageSplitBar,
+.usageMonthTrack {
+  border-color: var(--card-border);
+  background: rgba(88, 26, 208, 0.08);
+}
+
+.usageSplitUser,
+.usageMonthTrack i,
+.usageLegendUser {
+  background: var(--brand);
+}
+
+.usageSplitAssistant,
+.usageLegendAssistant {
+  background: #2c1c52;
 }
 
 .avatarChoice,

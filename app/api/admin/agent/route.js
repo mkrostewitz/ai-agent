@@ -7,8 +7,16 @@ export const runtime = "nodejs";
 
 const CHATBOT_COLLECTION = process.env.MONGODB_CHATBOT_COLLECTION || "chatbot";
 
+const DEFAULT_OWNER_PROFILE = {
+  type: "person",
+  first_name: "",
+  last_name: "",
+  company_name: "",
+};
+
 const DEFAULT_AGENT = {
   name: "Chatbot",
+  owner_profile: DEFAULT_OWNER_PROFILE,
   avatar: "/avatars/Michael_Intro.mp4",
   primary_color: "#6e26f5",
   secondary_color: "#0e273d",
@@ -40,9 +48,33 @@ function normalizeLocalizedEntries(value, fallback) {
     .filter((entry) => entry.lang && entry.text);
 }
 
+function normalizeOwnerProfile(value = {}) {
+  const source =
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const type = source.type === "company" ? "company" : "person";
+
+  return {
+    type,
+    first_name: cleanString(source.first_name || source.firstName),
+    last_name: cleanString(source.last_name || source.lastName),
+    company_name: cleanString(
+      source.company_name || source.companyName || source.company
+    ),
+  };
+}
+
+function mergeAgentDefaults(doc = {}) {
+  return {
+    ...DEFAULT_AGENT,
+    ...(doc || {}),
+    owner_profile: normalizeOwnerProfile(doc?.owner_profile),
+  };
+}
+
 function normalizeAgent(input = {}) {
   return {
     name: cleanString(input.name) || DEFAULT_AGENT.name,
+    owner_profile: normalizeOwnerProfile(input.owner_profile),
     avatar: cleanString(input.avatar) || DEFAULT_AGENT.avatar,
     primary_color: cleanString(input.primary_color) || DEFAULT_AGENT.primary_color,
     secondary_color:
@@ -66,7 +98,7 @@ export async function GET(request) {
       .collection(CHATBOT_COLLECTION)
       .findOne({}, {projection: {_id: 0}, sort: {updatedAt: -1, createdAt: -1}});
 
-    return NextResponse.json({agent: {...DEFAULT_AGENT, ...(doc || {})}});
+    return NextResponse.json({agent: mergeAgentDefaults(doc)});
   } catch (error) {
     console.error("Admin agent GET error:", error);
     return NextResponse.json(

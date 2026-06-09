@@ -3,6 +3,7 @@
 import mapboxgl from "mapbox-gl";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {
+  FiBarChart2,
   FiCheck,
   FiChevronDown,
   FiCode,
@@ -27,6 +28,7 @@ import AdminHeader from "./AdminHeader";
 import styles from "./admin.module.css";
 
 const TABS = [
+  {id: "dashboard", label: "Dashboard", Icon: FiBarChart2},
   {id: "profile", label: "Agent", Icon: FiUser},
   {id: "settings", label: "Settings", Icon: FiSettings},
   {id: "knowledge", label: "Knowledge", Icon: FiDatabase},
@@ -80,6 +82,25 @@ const GREETING_FIELD_TOKENS = [
   {key: "email", label: "Email", token: "{{Email}}"},
   {key: "company", label: "Company", token: "{{Company}}"},
   {key: "address", label: "Address", token: "{{Address}}"},
+];
+
+const OWNER_PROFILE_TYPES = [
+  {value: "person", label: "Person"},
+  {value: "company", label: "Company"},
+];
+
+const DEFAULT_OWNER_PROFILE = {
+  type: "person",
+  first_name: "",
+  last_name: "",
+  company_name: "",
+};
+
+const OWNER_PROFILE_FIELD_TOKENS = [
+  {key: "owner_name", label: "Full name", token: "{{OwnerName}}"},
+  {key: "owner_first_name", label: "First name", token: "{{OwnerFirstName}}"},
+  {key: "owner_last_name", label: "Last name", token: "{{OwnerLastName}}"},
+  {key: "owner_company", label: "Company name", token: "{{OwnerCompany}}"},
 ];
 
 const DEFAULT_REGISTRATION_SETTINGS = {
@@ -140,6 +161,27 @@ const DEFAULT_SYSTEM = {
   },
 };
 
+const DEFAULT_TOKEN_USAGE = {
+  generatedAt: null,
+  monthly: [],
+  topConversations: [],
+  totals: {
+    assistantTokens: 0,
+    averageTokensPerConversation: 0,
+    averageTokensPerMessage: 0,
+    conversationCount: 0,
+    currentMonthConversationCount: 0,
+    currentMonthTokens: 0,
+    estimatedTokens: 0,
+    inputTokens: 0,
+    messageCount: 0,
+    outputTokens: 0,
+    recordedTokens: 0,
+    totalTokens: 0,
+    userTokens: 0,
+  },
+};
+
 const MAIL_PROVIDER_OPTIONS = [
   {value: "apple", label: "Apple iCloud Mail"},
   {value: "gmail", label: "Gmail"},
@@ -183,6 +225,7 @@ const MAIL_PROVIDER_PRESETS = {
 
 const DEFAULT_AGENT = {
   name: "Chatbot",
+  owner_profile: DEFAULT_OWNER_PROFILE,
   avatar: "/avatars/Michael_Intro.mp4",
   primary_color: "#6e26f5",
   secondary_color: "#0e273d",
@@ -220,6 +263,12 @@ const CONVERSATION_ACTION_TYPE_LABELS = Object.fromEntries(
   CONVERSATION_ACTION_TYPES.map((type) => [type.value, type.label])
 );
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("en");
+const MONTH_FORMATTER = new Intl.DateTimeFormat("en", {
+  month: "short",
+  year: "numeric",
+});
+
 function formatDateTime(value) {
   if (!value) return "Not available";
 
@@ -230,6 +279,21 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatNumber(value) {
+  return NUMBER_FORMATTER.format(Number(value) || 0);
+}
+
+function formatMonth(value) {
+  if (!value) return "Unknown";
+  const date = new Date(`${value}-01T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? value : MONTH_FORMATTER.format(date);
+}
+
+function percentOf(value, total) {
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, Math.round((Number(value || 0) / total) * 100)));
 }
 
 function localizedValue(entries, lang) {
@@ -243,6 +307,29 @@ function setLocalizedValue(entries, lang, text) {
   return [...withoutLang, {lang, text}].sort((left, right) =>
     left.lang.localeCompare(right.lang)
   );
+}
+
+function normalizeOwnerProfileDraft(profile = {}) {
+  const source =
+    profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {};
+  const type = source.type === "company" ? "company" : "person";
+
+  return {
+    type,
+    first_name: String(source.first_name || source.firstName || "").trim(),
+    last_name: String(source.last_name || source.lastName || "").trim(),
+    company_name: String(
+      source.company_name || source.companyName || source.company || ""
+    ).trim(),
+  };
+}
+
+function normalizeAgentDraft(agent = {}) {
+  return {
+    ...DEFAULT_AGENT,
+    ...(agent || {}),
+    owner_profile: normalizeOwnerProfileDraft(agent?.owner_profile),
+  };
 }
 
 function createPromptDraft(prompt = {}) {
@@ -1066,6 +1153,198 @@ function EmbedModal({agent, onClose, onToast}) {
   );
 }
 
+function TokenUsageDashboardSection({busy, onRefresh, usage}) {
+  const totals = usage?.totals || DEFAULT_TOKEN_USAGE.totals;
+  const monthly = Array.isArray(usage?.monthly) ? usage.monthly : [];
+  const topConversations = Array.isArray(usage?.topConversations)
+    ? usage.topConversations
+    : [];
+  const totalTokens = Number(totals.totalTokens) || 0;
+  const maxMonthlyTokens = Math.max(
+    ...monthly.map((bucket) => Number(bucket.totalTokens) || 0),
+    0
+  );
+  const userShare = percentOf(totals.userTokens, totalTokens);
+  const assistantShare = percentOf(totals.assistantTokens, totalTokens);
+  const estimatedShare = percentOf(totals.estimatedTokens, totalTokens);
+  const metricCards = [
+    {
+      label: "Total tokens",
+      value: formatNumber(totals.totalTokens),
+      detail: `${formatNumber(totals.messageCount)} messages`,
+    },
+    {
+      label: "Current month",
+      value: formatNumber(totals.currentMonthTokens),
+      detail: `${formatNumber(
+        totals.currentMonthConversationCount
+      )} conversations`,
+    },
+    {
+      label: "Conversations",
+      value: formatNumber(totals.conversationCount),
+      detail: `${formatNumber(
+        totals.averageTokensPerConversation
+      )} tokens per conversation`,
+    },
+    {
+      label: "Average message",
+      value: formatNumber(totals.averageTokensPerMessage),
+      detail: "tokens per message",
+    },
+  ];
+
+  return (
+    <section className={styles.panel}>
+      <div className={styles.panelHeader}>
+        <div className={styles.titleBlock}>
+          <h1>Dashboard</h1>
+          <p className={styles.muted}>
+            Token usage across all stored chat conversations.
+          </p>
+        </div>
+        <button className={styles.ghostButton} onClick={onRefresh} disabled={busy}>
+          <FiRefreshCw aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
+
+      <div className={styles.usageMetricGrid}>
+        {metricCards.map((metric) => (
+          <article key={metric.label} className={styles.usageMetric}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+            <small>{metric.detail}</small>
+          </article>
+        ))}
+      </div>
+
+      <div className={styles.usageDashboardGrid}>
+        <section className={styles.usagePanel}>
+          <div className={styles.sectionHeader}>
+            <h2>Token mix</h2>
+            <span className={styles.usagePanelMeta}>
+              {estimatedShare}% estimated
+            </span>
+          </div>
+
+          <div className={styles.usageSplitBar} aria-hidden="true">
+            <span
+              className={styles.usageSplitUser}
+              style={{width: `${userShare}%`}}
+            />
+            <span
+              className={styles.usageSplitAssistant}
+              style={{width: `${assistantShare}%`}}
+            />
+          </div>
+
+          <div className={styles.usageLegend}>
+            <span>
+              <i className={styles.usageLegendUser} aria-hidden="true" />
+              Visitor {formatNumber(totals.userTokens)}
+            </span>
+            <span>
+              <i className={styles.usageLegendAssistant} aria-hidden="true" />
+              Assistant {formatNumber(totals.assistantTokens)}
+            </span>
+          </div>
+
+          <div className={styles.usageSourceGrid}>
+            <div>
+              <span>Estimated</span>
+              <strong>{formatNumber(totals.estimatedTokens)}</strong>
+            </div>
+            <div>
+              <span>Recorded</span>
+              <strong>{formatNumber(totals.recordedTokens)}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.usagePanel}>
+          <div className={styles.sectionHeader}>
+            <h2>Monthly usage</h2>
+            <span className={styles.usagePanelMeta}>
+              Last {formatNumber(monthly.length)} months
+            </span>
+          </div>
+
+          <div className={styles.usageMonthList}>
+            {monthly.length ? (
+              monthly.map((bucket) => {
+                const tokenCount = Number(bucket.totalTokens) || 0;
+                const width =
+                  maxMonthlyTokens > 0
+                    ? Math.max(4, Math.round((tokenCount / maxMonthlyTokens) * 100))
+                    : 0;
+
+                return (
+                  <div key={bucket.month} className={styles.usageMonthRow}>
+                    <span>{formatMonth(bucket.month)}</span>
+                    <div className={styles.usageMonthTrack} aria-hidden="true">
+                      <i style={{width: `${width}%`}} />
+                    </div>
+                    <strong>{formatNumber(tokenCount)}</strong>
+                  </div>
+                );
+              })
+            ) : (
+              <div className={styles.emptyState}>No token usage recorded yet.</div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className={styles.usagePanel}>
+        <div className={styles.sectionHeader}>
+          <h2>Highest usage conversations</h2>
+          <span className={styles.usagePanelMeta}>
+            Top {formatNumber(topConversations.length)}
+          </span>
+        </div>
+
+        <div className={styles.usageConversationTable}>
+          <div className={styles.usageConversationHeader} aria-hidden="true">
+            <span>Conversation</span>
+            <span>Tokens</span>
+            <span>Messages</span>
+            <span>Updated</span>
+          </div>
+          {topConversations.length ? (
+            topConversations.map((conversation) => (
+              <div
+                key={conversation.id || conversation.conversation_id}
+                className={styles.usageConversationRow}
+              >
+                <span className={styles.usageConversationTitle}>
+                  <strong>{conversation.title || "Conversation"}</strong>
+                  <small>{conversation.conversation_id}</small>
+                </span>
+                <span>
+                  <strong>{formatNumber(conversation.totalTokens)}</strong>
+                  <small>
+                    {formatNumber(conversation.userTokens)} visitor /{" "}
+                    {formatNumber(conversation.assistantTokens)} assistant
+                  </small>
+                </span>
+                <span>{formatNumber(conversation.messageCount)}</span>
+                <span>
+                  {formatDateTime(
+                    conversation.updated_at || conversation.created_at
+                  )}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className={styles.emptyState}>No conversations found.</div>
+          )}
+        </div>
+      </section>
+    </section>
+  );
+}
+
 function AgentSettingsPanel({
   adminStatus,
   namespaceOptions,
@@ -1290,6 +1569,8 @@ function AgentSection({
   setSettings,
 }) {
   const startingMessageRefs = useRef({});
+  const promptTextareaRefs = useRef({});
+  const ownerProfile = normalizeOwnerProfileDraft(agent.owner_profile);
 
   async function handleAvatarFileChange(event) {
     const input = event.currentTarget;
@@ -1325,38 +1606,110 @@ function AgentSection({
     }));
   }
 
-  function insertStartingMessageToken(lang, fieldKey) {
-    const option = GREETING_FIELD_TOKENS.find((item) => item.key === fieldKey);
-    if (!option) return;
+  function updateOwnerProfileField(field, value) {
+    setAgent((current) => {
+      const currentProfile = normalizeOwnerProfileDraft(current.owner_profile);
+      return {
+        ...current,
+        owner_profile: {
+          ...currentProfile,
+          [field]: value,
+        },
+      };
+    });
+  }
 
-    const input = startingMessageRefs.current[lang];
+  function promptTextareaRefKey(prompt, index, lang) {
+    return `${prompt.clientId || prompt.id || index}:${lang}`;
+  }
+
+  function insertTextAtCursor({currentText, input, token}) {
     const selectionStart =
       input && typeof input.selectionStart === "number"
         ? input.selectionStart
         : null;
     const selectionEnd =
       input && typeof input.selectionEnd === "number" ? input.selectionEnd : null;
+    const start =
+      selectionStart === null
+        ? currentText.length
+        : Math.min(selectionStart, currentText.length);
+    const end =
+      selectionEnd === null ? start : Math.min(selectionEnd, currentText.length);
+
+    return {
+      nextCursor: start + token.length,
+      nextText: `${currentText.slice(0, start)}${token}${currentText.slice(end)}`,
+    };
+  }
+
+  function insertStartingMessageToken(lang, fieldKey) {
+    const option = GREETING_FIELD_TOKENS.find((item) => item.key === fieldKey);
+    if (!option) return;
+
+    const input = startingMessageRefs.current[lang];
     let nextCursor = 0;
 
     setAgent((current) => {
       const currentText = localizedValue(current.starting_message, lang);
-      const start =
-        selectionStart === null
-          ? currentText.length
-          : Math.min(selectionStart, currentText.length);
-      const end =
-        selectionEnd === null ? start : Math.min(selectionEnd, currentText.length);
-      const nextText = `${currentText.slice(0, start)}${option.token}${currentText.slice(end)}`;
-      nextCursor = start + option.token.length;
+      const insertion = insertTextAtCursor({
+        currentText,
+        input,
+        token: option.token,
+      });
+      nextCursor = insertion.nextCursor;
 
       return {
         ...current,
-        starting_message: setLocalizedValue(current.starting_message, lang, nextText),
+        starting_message: setLocalizedValue(
+          current.starting_message,
+          lang,
+          insertion.nextText
+        ),
       };
     });
 
     requestAnimationFrame(() => {
       const currentInput = startingMessageRefs.current[lang];
+      if (!currentInput) return;
+      currentInput.focus();
+      if (typeof currentInput.setSelectionRange === "function") {
+        currentInput.setSelectionRange(nextCursor, nextCursor);
+      }
+    });
+  }
+
+  function insertPromptToken(index, lang, fieldKey, refKey) {
+    const option = OWNER_PROFILE_FIELD_TOKENS.find((item) => item.key === fieldKey);
+    if (!option) return;
+
+    const input = promptTextareaRefs.current[refKey];
+    let nextCursor = 0;
+
+    setChatPrompts((current) =>
+      current.map((prompt, promptIndex) => {
+        if (promptIndex !== index) return prompt;
+
+        const currentText = promptLocalizedValue(prompt, lang);
+        const insertion = insertTextAtCursor({
+          currentText,
+          input,
+          token: option.token,
+        });
+        nextCursor = insertion.nextCursor;
+
+        return {
+          ...prompt,
+          translations: {
+            ...(prompt.translations || {}),
+            [lang]: insertion.nextText,
+          },
+        };
+      })
+    );
+
+    requestAnimationFrame(() => {
+      const currentInput = promptTextareaRefs.current[refKey];
       if (!currentInput) return;
       currentInput.focus();
       if (typeof currentInput.setSelectionRange === "function") {
@@ -1376,6 +1729,64 @@ function AgentSection({
       </div>
 
       <div className={styles.agentSectionStack}>
+        <section className={styles.agentConfigSection}>
+          <div className={styles.sectionHeader}>
+            <h2>Owner Profile</h2>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={onSaveAgent}
+              disabled={saving}
+            >
+              <FiSave aria-hidden="true" />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+
+          <div className={styles.ownerProfileGrid}>
+            <SelectField
+              label="Type"
+              options={OWNER_PROFILE_TYPES}
+              value={ownerProfile.type}
+              onChange={(type) => updateOwnerProfileField("type", type)}
+            />
+
+            {ownerProfile.type === "company" ? (
+              <label className={styles.field}>
+                Company name
+                <input
+                  value={ownerProfile.company_name}
+                  onChange={(event) =>
+                    updateOwnerProfileField("company_name", event.target.value)
+                  }
+                />
+              </label>
+            ) : (
+              <>
+                <label className={styles.field}>
+                  First name
+                  <input
+                    value={ownerProfile.first_name}
+                    onChange={(event) =>
+                      updateOwnerProfileField("first_name", event.target.value)
+                    }
+                  />
+                </label>
+
+                <label className={styles.field}>
+                  Last name
+                  <input
+                    value={ownerProfile.last_name}
+                    onChange={(event) =>
+                      updateOwnerProfileField("last_name", event.target.value)
+                    }
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        </section>
+
         <AgentSettingsPanel
           adminStatus={adminStatus}
           namespaceOptions={namespaceOptions}
@@ -1624,25 +2035,63 @@ function AgentSection({
                   </div>
 
                   <div className={styles.promptTranslationGrid}>
-                    {LANGUAGES.map((language) => (
-                      <label key={language.code} className={styles.field}>
-                        {language.label}
-                        <textarea
-                          rows="2"
-                          value={promptLocalizedValue(prompt, language.code)}
-                          onChange={(event) =>
-                            setChatPrompts((current) =>
-                              setPromptLocalizedValue(
-                                current,
-                                index,
-                                language.code,
-                                event.target.value
+                    {LANGUAGES.map((language) => {
+                      const refKey = promptTextareaRefKey(
+                        prompt,
+                        index,
+                        language.code
+                      );
+
+                      return (
+                        <label key={language.code} className={styles.field}>
+                          <span className={styles.fieldLabelRow}>
+                            <span>{language.label}</span>
+                            <select
+                              className={styles.inlineFieldSelect}
+                              defaultValue=""
+                              aria-label={`Insert owner field into ${language.label} chat prompt`}
+                              onChange={(event) => {
+                                insertPromptToken(
+                                  index,
+                                  language.code,
+                                  event.target.value,
+                                  refKey
+                                );
+                                event.target.value = "";
+                              }}
+                            >
+                              <option value="">Insert field</option>
+                              {OWNER_PROFILE_FIELD_TOKENS.map((option) => (
+                                <option key={option.key} value={option.key}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </span>
+                          <textarea
+                            ref={(node) => {
+                              if (node) {
+                                promptTextareaRefs.current[refKey] = node;
+                              } else {
+                                delete promptTextareaRefs.current[refKey];
+                              }
+                            }}
+                            rows="2"
+                            value={promptLocalizedValue(prompt, language.code)}
+                            onChange={(event) =>
+                              setChatPrompts((current) =>
+                                setPromptLocalizedValue(
+                                  current,
+                                  index,
+                                  language.code,
+                                  event.target.value
+                                )
                               )
-                            )
-                          }
-                        />
-                      </label>
-                    ))}
+                            }
+                          />
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               ))
@@ -2901,7 +3350,7 @@ function ConversationsSection({
 }
 
 export default function AdminDashboard({user}) {
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [agent, setAgent] = useState(DEFAULT_AGENT);
   const [chatPrompts, setChatPrompts] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -2910,6 +3359,7 @@ export default function AdminDashboard({user}) {
   const [conversations, setConversations] = useState([]);
   const [conversationCounts, setConversationCounts] = useState({});
   const [conversationFilter, setConversationFilter] = useState({status: "", q: ""});
+  const [tokenUsage, setTokenUsage] = useState(DEFAULT_TOKEN_USAGE);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [embedOpen, setEmbedOpen] = useState(false);
@@ -2947,7 +3397,7 @@ export default function AdminDashboard({user}) {
 
   async function loadAgent() {
     const data = await fetchJson("/api/admin/agent");
-    setAgent({...DEFAULT_AGENT, ...(data.agent || {})});
+    setAgent(normalizeAgentDraft(data.agent));
   }
 
   async function loadChatPrompts() {
@@ -2980,6 +3430,15 @@ export default function AdminDashboard({user}) {
     setConversationCounts(data.counts || {});
   }
 
+  async function loadTokenUsage() {
+    const data = await fetchJson("/api/admin/usage/tokens");
+    setTokenUsage({
+      ...DEFAULT_TOKEN_USAGE,
+      ...data,
+      totals: {...DEFAULT_TOKEN_USAGE.totals, ...(data.totals || {})},
+    });
+  }
+
   useEffect(() => {
     void runTask(
       async () => {
@@ -2990,6 +3449,7 @@ export default function AdminDashboard({user}) {
           loadSystem(),
           loadDocuments(),
           loadConversations(),
+          loadTokenUsage(),
         ]);
       },
       ""
@@ -3012,7 +3472,7 @@ export default function AdminDashboard({user}) {
         method: "PUT",
         body: JSON.stringify(agent),
       });
-      setAgent({...DEFAULT_AGENT, ...(data.agent || {})});
+      setAgent(normalizeAgentDraft(data.agent));
     }, "Agent profile saved.");
   }
 
@@ -3132,6 +3592,7 @@ export default function AdminDashboard({user}) {
         method: "DELETE",
       });
       await loadConversations();
+      await loadTokenUsage();
     }, "Conversation deleted.");
   }
 
@@ -3208,6 +3669,14 @@ export default function AdminDashboard({user}) {
             </div>
           ) : null}
         </div>
+
+        {activeTab === "dashboard" ? (
+          <TokenUsageDashboardSection
+            busy={busy}
+            onRefresh={() => runTask(loadTokenUsage, "")}
+            usage={tokenUsage}
+          />
+        ) : null}
 
         {activeTab === "profile" ? (
           <AgentSection
