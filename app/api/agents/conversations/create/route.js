@@ -7,6 +7,7 @@ import {
   getMongoDbName,
   hasMongoConfig,
 } from "@/app/lib/mongo";
+import {createStoredConversationMessage} from "@/app/lib/tokenUsage";
 import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
 const CONVERSATIONS_COLLECTION =
@@ -49,10 +50,7 @@ export async function POST(req) {
     const collection = db.collection(CONVERSATIONS_COLLECTION);
     const storedConversation = {
       conversation_id: conversationId,
-      messages: conversation.map((m) => ({
-        role: m?.role === "assistant" ? "assistant" : "user",
-        message: typeof m?.message === "string" ? m.message : "",
-      })),
+      messages: conversation.map((m) => createStoredConversationMessage(m, now)),
       user,
       metadata: {
         ...metadata,

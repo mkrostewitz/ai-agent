@@ -5,6 +5,7 @@ import {
   getMongoDbName,
   hasMongoConfig,
 } from "@/app/lib/mongo";
+import {createStoredConversationMessage} from "@/app/lib/tokenUsage";
 import {widgetOptionsResponse, withWidgetCors} from "../../cors";
 
 const CONVERSATIONS_COLLECTION =
@@ -35,6 +36,7 @@ export async function PUT(req) {
     const metadata = body?.metadata || {};
     const source = body?.source || "widget";
     const tracking = await getRequestTracking(req);
+    const now = new Date();
 
     if (!conversationId) {
       return withWidgetCors(
@@ -58,7 +60,7 @@ export async function PUT(req) {
           tracking: metadata?.tracking || tracking,
         },
         source,
-        updated_at: new Date(),
+        updated_at: now,
       },
     };
 
@@ -78,10 +80,7 @@ export async function PUT(req) {
     if (conversation.length) {
       update.$push = {
         messages: {
-          $each: conversation.map((m) => ({
-            role: m?.role === "assistant" ? "assistant" : "user",
-            message: typeof m?.message === "string" ? m.message : "",
-          })),
+          $each: conversation.map((m) => createStoredConversationMessage(m, now)),
         },
       };
     }
