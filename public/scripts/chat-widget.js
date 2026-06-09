@@ -20,8 +20,6 @@
   }
 
   ensureStyle();
-  // Apply initial defaults so the widget is colored even before agent fetch resolves
-  setTimeout(setColors, 0);
 
   const ds = script.dataset || {};
   // console.log("DS Response -> ", ds);
@@ -787,7 +785,6 @@
   avatar.className = "chat-widget-avatar launcher-avatar";
   const onlineDot = document.createElement("span");
   onlineDot.className = "chat-widget-online";
-  setAvatarMedia(avatar, state.avatar, state.name, ".chat-widget-online");
   avatar.appendChild(onlineDot);
 
   launcher.appendChild(avatar);
@@ -802,9 +799,6 @@
   headerAvatar.className = "chat-widget-avatar";
   const headerOnline = document.createElement("span");
   headerOnline.className = "chat-widget-online";
-  setAvatarMedia(headerAvatar, state.avatar, state.name, ".chat-widget-online", {
-    autoplayVideo: false,
-  });
   headerAvatar.appendChild(headerOnline);
 
   const headerInfo = document.createElement("div");
@@ -869,9 +863,6 @@
   toastAvatar.className = "toast-avatar";
   const toastOnline = document.createElement("span");
   toastOnline.className = "toast-online";
-  setAvatarMedia(toastAvatar, state.avatar, state.name, ".toast-online", {
-    autoplayVideo: false,
-  });
   toastAvatar.appendChild(toastOnline);
   const toastText = document.createElement("div");
   toastText.className = "toast-text";
@@ -1339,7 +1330,16 @@
     shell.appendChild(toast);
     shell.appendChild(launcher);
   }
-  attachTarget.appendChild(shell);
+  let shellMounted = false;
+
+  function mountWidgetShell() {
+    if (shellMounted) return;
+    shellMounted = true;
+    setColors();
+    updateInputAvailability();
+    toggleUserOverlay();
+    attachTarget.appendChild(shell);
+  }
 
   function sanitizeUserPayload(rawUser) {
     if (!rawUser) return null;
@@ -2210,7 +2210,39 @@
     });
   }
 
-  function init() {
+  async function fetchAgentDetails() {
+    const detailsUrl = host + "/api/agents/details";
+    console.log("Fetching Agent Details from ", detailsUrl);
+
+    try {
+      const res = await fetch(detailsUrl);
+      if (!res.ok) {
+        console.warn("Agent details request failed", res.status);
+        return null;
+      }
+      try {
+        const json = await res.json();
+        console.log("Response from Fetching Agent -> ", json);
+        return json?.data || null;
+      } catch (e) {
+        console.warn("Failed to parse agent details response", e);
+        return null;
+      }
+    } catch (err) {
+      console.warn("Agent details fetch error", err);
+      return null;
+    }
+  }
+
+  async function waitForWidgetData(promises) {
+    await Promise.all(
+      promises.map(function (promise) {
+        return Promise.resolve(promise).catch(function () {});
+      })
+    );
+  }
+
+  async function init() {
     // reload previous conversation from cookie then server if available
     const dsLangRaw = (ds.lang || "").trim();
     const dsLangLower = dsLangRaw.toLowerCase();
@@ -2225,49 +2257,41 @@
       state.lang = normalized || state.lang;
     }
 
-    loadExternalTranslations(state.lang).then(applyTranslations);
-    toggleUserOverlay();
-    setPhonePlaceholder();
-    loadDefaultQuestions();
-    loadConversationFromServer();
+    const translationsPromise = loadExternalTranslations(state.lang).then(
+      applyTranslations
+    );
+    const phonePlaceholderPromise = setPhonePlaceholder();
+    const defaultQuestionsPromise = loadDefaultQuestions();
+    const conversationPromise = loadConversationFromServer();
+    const agentData = await fetchAgentDetails();
 
-    const detailsUrl = host + "/api/agents/details";
-    console.log("Fetching Agent Details from ", detailsUrl);
+    if (agentData) {
+      parseAgent(agentData);
+    } else {
+      updateAvatarMediaAll(state.avatar, state.name || "Chatbot");
+      headerName.textContent = state.name || "Chatbot";
+      setColors();
+      renderRegistrationFields();
+      toggleUserOverlay();
+      saveConversationCookie();
+    }
 
-    fetch(detailsUrl)
-      .then(async function (res) {
-        if (!res.ok) {
-          console.warn("Agent details request failed", res.status);
-          return null;
-        }
-        try {
-          const json = await res.json();
-          console.log("Response from Fetching Agent -> ", json);
-          return json;
-        } catch (e) {
-          console.warn("Failed to parse agent details response", e);
-          return null;
-        }
-      })
-      .then(function (resp) {
-        if (resp && resp.data) {
-          parseAgent(resp.data);
-          if (mode === "modal") {
-            showToast();
-            if (openOnLoad) toggleModal(true);
-          }
-        } else if (mode === "modal") {
-          showToast();
-        }
-      })
-      .catch(function (err) {
-        console.warn("Agent details fetch error", err);
-        if (mode === "modal") showToast();
-      });
+    await waitForWidgetData([
+      translationsPromise,
+      phonePlaceholderPromise,
+      defaultQuestionsPromise,
+      conversationPromise,
+    ]);
+
+    mountWidgetShell();
+
+    if (mode === "modal") {
+      showToast();
+      if (openOnLoad) toggleModal(true);
+    }
 
     scheduleLauncherNudge();
   }
 
-  setColors();
   init();
 })();
