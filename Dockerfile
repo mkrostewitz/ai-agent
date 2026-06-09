@@ -19,6 +19,7 @@ ENV NODE_ENV=production
 
 # Copy only what we need for runtime
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/app/widget-demo.html/widget-demo.html ./app/widget-demo.html/widget-demo.html
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/.next-build ./.next-build
 COPY --from=builder /app/package*.json ./
