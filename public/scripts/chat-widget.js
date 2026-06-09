@@ -28,11 +28,15 @@
   const useBrowserLang = !dsLangRaw || dsLangLower === "browser";
   const forcedLang = useBrowserLang ? null : dsLangLower.slice(0, 2);
   const rawLocale = useBrowserLang ? navigator.language || "en" : dsLangRaw;
-  const resolvedLang = (forcedLang || rawLocale || "en").slice(0, 2).toLowerCase();
+  const resolvedLang = (forcedLang || rawLocale || "en")
+    .slice(0, 2)
+    .toLowerCase();
   const scriptTracking = {
     countryCode: String(
-      ds.countryCode || ds.geoCountry || ds.geoCountryCode || ""
-    ).trim().toUpperCase(),
+      ds.countryCode || ds.geoCountry || ds.geoCountryCode || "",
+    )
+      .trim()
+      .toUpperCase(),
     latitude: ds.latitude || ds.lat || ds.geoLatitude || ds.geoLat || "",
     longitude:
       ds.longitude ||
@@ -180,7 +184,9 @@
         ? config
         : {};
     const sourceFields =
-      source.fields && typeof source.fields === "object" && !Array.isArray(source.fields)
+      source.fields &&
+      typeof source.fields === "object" &&
+      !Array.isArray(source.fields)
         ? source.fields
         : {};
     const fields = {};
@@ -195,7 +201,9 @@
           ? sourceFields[definition.key]
           : {};
       const show =
-        typeof field.show === "boolean" ? field.show : Boolean(defaultField.show);
+        typeof field.show === "boolean"
+          ? field.show
+          : Boolean(defaultField.show);
       fields[definition.key] = {
         show,
         required:
@@ -218,15 +226,16 @@
   const state = {
     agent: null,
     colors: {
-      primary: "#A8C957",
-      secondary: "#c6c1c1ff",
-      button: "#A8C957",
+      primary: "#6e26f5",
+      secondary: "#0e273d",
+      button: "#6e26f5",
     },
     lang: resolvedLang,
-    name: ds.agentName || "",
-    greeting: "Hi there, how can I help you?",
-    starting: "",
-    avatar: host + "/avatars/Michael_Intro.mp4",
+    name: ds.agentName || "Michaela",
+    greeting: "Hi there, I am Michaela!",
+    starting:
+      "Hi {{FName}}, I am Michaela, the AI assistant for Mathias. How can I help today?",
+    avatar: host + "/avatars/Michelle_Intro.mp4",
     mapboxToken: "",
     tracking: {
       ...scriptTracking,
@@ -239,9 +248,12 @@
     sending: false,
     conversationId: null,
     typing: false,
+    typewriting: false,
+    typewriterRunId: 0,
     hasStarted: false,
     introInProgress: false,
     promptOptions: [],
+    promptsOpen: false,
     registration: normalizeRegistrationConfig(),
     registrationCompleted: false,
     user: {
@@ -314,8 +326,8 @@
       const res = await fetch(
         host +
           `/api/agents/conversations/details?conversation_id=${encodeURIComponent(
-            state.conversationId
-          )}`
+            state.conversationId,
+          )}`,
       );
 
       console.log("Conversations Response -> ", res);
@@ -350,14 +362,14 @@
             item &&
             typeof item === "object" &&
             (item.language || item.lang) &&
-            (item.language || item.lang).slice(0, 2).toLowerCase() === lang
+            (item.language || item.lang).slice(0, 2).toLowerCase() === lang,
         ) ||
         value.find(
           (item) =>
             item &&
             typeof item === "object" &&
             (item.language || item.lang || "").slice(0, 2).toLowerCase() ===
-              "en"
+              "en",
         );
       return hit?.text || null;
     }
@@ -395,6 +407,8 @@
     en: {
       send: "Send",
       placeholder: "Type your message...",
+      showPrompts: "Show prompts",
+      hidePrompts: "Hide prompts",
       notConfigured: "This agent is not fully configured yet.",
       error: "Sorry, something went wrong. Please try again.",
       fallback: "I am here to help.",
@@ -431,13 +445,16 @@
       regionRequired: "State / region is required.",
       postalCodeRequired: "Postal code is required.",
       countryRequired: "Country is required.",
-      registrationRequired: "Please complete the required details to start chatting.",
+      registrationRequired:
+        "Please complete the required details to start chatting.",
       blockedPlaceholder: "Enter your details to start chatting",
       startNewConversation: "Start new conversation",
     },
     de: {
       send: "Senden",
       placeholder: "Nachricht eingeben...",
+      showPrompts: "Prompts anzeigen",
+      hidePrompts: "Prompts ausblenden",
       notConfigured: "Dieser Agent ist noch nicht vollständig konfiguriert.",
       error:
         "Entschuldigung, etwas ist schiefgelaufen. Bitte erneut versuchen.",
@@ -459,7 +476,8 @@
       postalCodeLabel: "Postleitzahl",
       countryLabel: "Land",
       optionalSuffix: "(optional)",
-      addressSuggestionsUnavailable: "Adress-Autovervollständigung ist nicht verfügbar.",
+      addressSuggestionsUnavailable:
+        "Adress-Autovervollständigung ist nicht verfügbar.",
       addressNoSuggestions: "Keine passenden Adressen gefunden.",
       startChat: "Chat starten",
       firstNameRequired: "Vorname ist erforderlich.",
@@ -483,6 +501,8 @@
     it: {
       send: "Invia",
       placeholder: "Scrivi il tuo messaggio...",
+      showPrompts: "Mostra prompt",
+      hidePrompts: "Nascondi prompt",
       notConfigured: "Questo agente non è ancora completamente configurato.",
       error: "Spiacente, si è verificato un errore. Riprova.",
       fallback: "Sono qui per aiutarti.",
@@ -520,8 +540,7 @@
       regionRequired: "La provincia / regione è obbligatoria.",
       postalCodeRequired: "Il CAP è obbligatorio.",
       countryRequired: "Il paese è obbligatorio.",
-      registrationRequired:
-        "Completa i dati obbligatori per iniziare la chat.",
+      registrationRequired: "Completa i dati obbligatori per iniziare la chat.",
       blockedPlaceholder: "Inserisci i dati per iniziare",
       startNewConversation: "Avvia nuova conversazione",
     },
@@ -564,6 +583,7 @@
     input.placeholder = needsUserDetails()
       ? t("blockedPlaceholder")
       : t("placeholder");
+    updatePromptToggleLabel();
     clearLink.textContent = t("startNewConversation");
     userTitle.textContent = t("userTitle");
     userSubtitle.textContent = t("userSubtitle");
@@ -593,14 +613,15 @@
 
     if (region) {
       match = countryData.find(
-        (entry) => (entry.code || "").toUpperCase() === region && entry.dialCode
+        (entry) =>
+          (entry.code || "").toUpperCase() === region && entry.dialCode,
       );
     }
 
     if (!match && language) {
       match = countryData.find(
         (entry) =>
-          (entry.code || "").toLowerCase() === language && entry.dialCode
+          (entry.code || "").toLowerCase() === language && entry.dialCode,
       );
     }
 
@@ -618,7 +639,7 @@
 
   function resolveWidgetAssetUrl(src, fallback) {
     const trimmed = (src || "").trim();
-    const fallbackUrl = fallback || host + "/avatars/Michael_Intro.mp4";
+    const fallbackUrl = fallback || host + "/avatars/Michelle_Intro.mp4";
     if (!trimmed) return fallbackUrl;
     if (/^(data|blob):/i.test(trimmed)) return trimmed;
 
@@ -679,7 +700,7 @@
       media.playsInline = true;
       media.controls = false;
       media.preload = "auto";
-      media.setAttribute("aria-label", alt || "Chatbot");
+      media.setAttribute("aria-label", alt || "Michaela");
       media.setAttribute("playsinline", "true");
       media.setAttribute("muted", "true");
       if (opts.autoplayVideo) {
@@ -691,7 +712,7 @@
         });
       }
     } else {
-      media.alt = alt || "Chatbot";
+      media.alt = alt || "Michaela";
       media.decoding = "async";
       media.loading = "eager";
       media.fetchPriority = "high";
@@ -759,9 +780,9 @@
       existing.dataset.avatarSrc === resolvedSrc &&
       existing.dataset.avatarAutoplay === nextAutoplay
     ) {
-      if (existing.tagName === "IMG") existing.alt = alt || "Chatbot";
+      if (existing.tagName === "IMG") existing.alt = alt || "Michaela";
       if (existing.tagName === "VIDEO") {
-        existing.setAttribute("aria-label", alt || "Chatbot");
+        existing.setAttribute("aria-label", alt || "Michaela");
       }
       return;
     }
@@ -829,12 +850,18 @@
 
   const inputRow = document.createElement("form");
   inputRow.className = "chat-widget-input";
+  const promptToggleBtn = document.createElement("button");
+  promptToggleBtn.type = "button";
+  promptToggleBtn.className = "chat-widget-prompt-toggle hidden";
+  promptToggleBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path><path d="M12 8v6"></path><path d="M9 11h6"></path></svg>';
   const input = document.createElement("input");
   input.type = "text";
   input.placeholder = t("placeholder");
   const sendBtn = document.createElement("button");
   sendBtn.type = "submit";
   sendBtn.textContent = t("send");
+  inputRow.appendChild(promptToggleBtn);
   inputRow.appendChild(input);
   inputRow.appendChild(sendBtn);
 
@@ -875,7 +902,7 @@
   toast.appendChild(toastClose);
 
   function updateAvatarMediaAll(src, altText) {
-    const alt = altText || "Chatbot";
+    const alt = altText || "Michaela";
     setAvatarMedia(avatar, src, alt, ".chat-widget-online");
     setAvatarMedia(headerAvatar, src, alt, ".chat-widget-online", {
       autoplayVideo: false,
@@ -947,7 +974,10 @@
   Object.values(userFields).forEach(function (item) {
     item.field.addEventListener("input", function () {
       userError.textContent = "";
-      if (item.definition.addressSearch || item.definition.parentKey === "address") {
+      if (
+        item.definition.addressSearch ||
+        item.definition.parentKey === "address"
+      ) {
         state.user.address_latitude = "";
         state.user.address_longitude = "";
         state.user.address_country_code = "";
@@ -974,11 +1004,10 @@
         ? {key: definitionOrKey}
         : definitionOrKey || {};
     const configKey = definition.parentKey || definition.key;
-    const baseConfig =
-      state.registration?.fields?.[configKey] || {
-        show: false,
-        required: false,
-      };
+    const baseConfig = state.registration?.fields?.[configKey] || {
+      show: false,
+      required: false,
+    };
 
     if (definition.parentKey === "address") {
       return {
@@ -1030,7 +1059,9 @@
 
   function registrationFieldLabel(definition, fieldConfig) {
     const label = t(definition.labelKey);
-    return fieldConfig.required ? label : `${label} ${t("optionalSuffix")}`.trim();
+    return fieldConfig.required
+      ? label
+      : `${label} ${t("optionalSuffix")}`.trim();
   }
 
   function renderRegistrationFields() {
@@ -1081,7 +1112,7 @@
       context?.country?.name ||
         context?.country?.country_name ||
         context?.country?.country_code ||
-        ""
+        "",
     ).trim();
   }
 
@@ -1098,15 +1129,12 @@
     const context = properties.context || {};
     const addressContext = context.address || {};
     const addressLine1 = String(
-      properties.address_line1 ||
-        addressContext.name ||
-        properties.name ||
-        ""
+      properties.address_line1 || addressContext.name || properties.name || "",
     ).trim();
     const placeFormatted = String(properties.place_formatted || "").trim();
     const fullAddress = String(
       properties.full_address ||
-        [addressLine1, placeFormatted].filter(Boolean).join(", ")
+        [addressLine1, placeFormatted].filter(Boolean).join(", "),
     ).trim();
 
     return {
@@ -1119,7 +1147,9 @@
       region: addressContextName(context, "region"),
       postal_code: addressContextName(context, "postcode"),
       country: addressCountryName(context),
-      country_code: String(context.country?.country_code || "").trim().toUpperCase(),
+      country_code: String(context.country?.country_code || "")
+        .trim()
+        .toUpperCase(),
       longitude: addressCoordinate(feature, "longitude"),
       latitude: addressCoordinate(feature, "latitude"),
     };
@@ -1185,7 +1215,9 @@
         address.region,
         address.postal_code,
         address.country,
-      ].filter(Boolean).join(", ");
+      ]
+        .filter(Boolean)
+        .join(", ");
 
       option.appendChild(title);
       option.appendChild(subtitle);
@@ -1231,7 +1263,12 @@
     return (value * Math.PI) / 180;
   }
 
-  function distanceMeters(fromLatitude, fromLongitude, toLatitude, toLongitude) {
+  function distanceMeters(
+    fromLatitude,
+    fromLongitude,
+    toLatitude,
+    toLongitude,
+  ) {
     const earthRadiusMeters = 6371000;
     const deltaLatitude = toRadians(toLatitude - fromLatitude);
     const deltaLongitude = toRadians(toLongitude - fromLongitude);
@@ -1243,7 +1280,11 @@
         Math.cos(endLatitude) *
         Math.sin(deltaLongitude / 2) ** 2;
 
-    return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+    return (
+      2 *
+      earthRadiusMeters *
+      Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+    );
   }
 
   function sortAddressFeaturesByDistance(features) {
@@ -1252,17 +1293,43 @@
     const fromLatitude = Number(state.tracking.latitude);
     const fromLongitude = Number(state.tracking.longitude);
     return [...features].sort(function (left, right) {
-      const leftLatitude = finiteCoordinate(addressCoordinate(left, "latitude"), -90, 90);
-      const leftLongitude = finiteCoordinate(addressCoordinate(left, "longitude"), -180, 180);
-      const rightLatitude = finiteCoordinate(addressCoordinate(right, "latitude"), -90, 90);
-      const rightLongitude = finiteCoordinate(addressCoordinate(right, "longitude"), -180, 180);
+      const leftLatitude = finiteCoordinate(
+        addressCoordinate(left, "latitude"),
+        -90,
+        90,
+      );
+      const leftLongitude = finiteCoordinate(
+        addressCoordinate(left, "longitude"),
+        -180,
+        180,
+      );
+      const rightLatitude = finiteCoordinate(
+        addressCoordinate(right, "latitude"),
+        -90,
+        90,
+      );
+      const rightLongitude = finiteCoordinate(
+        addressCoordinate(right, "longitude"),
+        -180,
+        180,
+      );
 
       if (leftLatitude === null || leftLongitude === null) return 1;
       if (rightLatitude === null || rightLongitude === null) return -1;
 
       return (
-        distanceMeters(fromLatitude, fromLongitude, leftLatitude, leftLongitude) -
-        distanceMeters(fromLatitude, fromLongitude, rightLatitude, rightLongitude)
+        distanceMeters(
+          fromLatitude,
+          fromLongitude,
+          leftLatitude,
+          leftLongitude,
+        ) -
+        distanceMeters(
+          fromLatitude,
+          fromLongitude,
+          rightLatitude,
+          rightLongitude,
+        )
       );
     });
   }
@@ -1283,7 +1350,9 @@
     });
     const latitude = finiteCoordinate(state.tracking.latitude, -90, 90);
     const longitude = finiteCoordinate(state.tracking.longitude, -180, 180);
-    const countryCode = String(state.tracking.countryCode || "").trim().toLowerCase();
+    const countryCode = String(state.tracking.countryCode || "")
+      .trim()
+      .toLowerCase();
 
     if (latitude !== null && longitude !== null) {
       params.set("proximity", `${longitude},${latitude}`);
@@ -1298,12 +1367,14 @@
     try {
       const response = await fetch(
         `https://api.mapbox.com/search/geocode/v6/forward?${params.toString()}`,
-        {signal: controller.signal}
+        {signal: controller.signal},
       );
       if (!response.ok) throw new Error(`Mapbox ${response.status}`);
       const data = await response.json();
       const features = Array.isArray(data?.features) ? data.features : [];
-      renderAddressSuggestions(sortAddressFeaturesByDistance(features).slice(0, 5));
+      renderAddressSuggestions(
+        sortAddressFeaturesByDistance(features).slice(0, 5),
+      );
     } catch (error) {
       if (error?.name === "AbortError") return;
       addressSuggestions.innerHTML = "";
@@ -1343,7 +1414,11 @@
 
   function sanitizeUserPayload(rawUser) {
     if (!rawUser) return null;
-    const addressLine1 = (rawUser.address_line1 || rawUser.address || "").trim();
+    const addressLine1 = (
+      rawUser.address_line1 ||
+      rawUser.address ||
+      ""
+    ).trim();
     const addressLine2 = (rawUser.address_line2 || "").trim();
     const city = (rawUser.city || "").trim();
     const region = (rawUser.region || "").trim();
@@ -1356,7 +1431,9 @@
       postalCity,
       region,
       country,
-    ].filter(Boolean).join(", ");
+    ]
+      .filter(Boolean)
+      .join(", ");
     const payload = {
       first_name: (rawUser.first_name || "").trim(),
       last_name: (rawUser.last_name || "").trim(),
@@ -1372,7 +1449,9 @@
       country,
       address_latitude: (rawUser.address_latitude || "").toString().trim(),
       address_longitude: (rawUser.address_longitude || "").toString().trim(),
-      address_country_code: (rawUser.address_country_code || "").toString().trim(),
+      address_country_code: (rawUser.address_country_code || "")
+        .toString()
+        .trim(),
     };
     const hasData = Object.values(payload).some(Boolean);
     return hasData ? payload : null;
@@ -1422,6 +1501,13 @@
     });
   }
 
+  function reducedMotionEnabled() {
+    return (
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
+
   function focusWithoutPageScroll(element) {
     if (!element || typeof element.focus !== "function") return;
     requestAnimationFrame(function () {
@@ -1461,15 +1547,37 @@
     return 24;
   }
 
+  function assistantCharacterDelay(char) {
+    if (/\s/.test(char)) return 8;
+    if (/[.,!?;:]/.test(char)) return 55;
+    return 18;
+  }
+
+  function assistantTypewriterBatchSize(charCount) {
+    if (charCount > 900) return 4;
+    if (charCount > 500) return 3;
+    if (charCount > 240) return 2;
+    return 1;
+  }
+
   function updateStartNewVisibility() {
     const show = state.conversation.length > 1;
     clearLink.style.display = show ? "block" : "none";
-    clearLink.classList.toggle("disabled", state.typing || state.introInProgress);
+    clearLink.classList.toggle(
+      "disabled",
+      state.typing ||
+        state.typewriting ||
+        state.sending ||
+        state.introInProgress,
+    );
   }
 
   function startNewConversationFlow() {
-    if (state.typing) return;
+    if (state.typing || state.typewriting || state.sending) return;
     const userPayload = getRegistrationUserPayload();
+    state.typewriterRunId += 1;
+    state.typewriting = false;
+    state.promptsOpen = false;
     state.conversation = [];
     state.conversationId = null;
     state.hasStarted = false;
@@ -1488,7 +1596,9 @@
     if (state.conversationId) return false;
     if (!registrationEnabled() || !registrationHasVisibleFields()) return false;
     if (!state.registrationCompleted) return true;
-    return registrationHasRequiredFields() && !registrationRequiredFieldsComplete();
+    return (
+      registrationHasRequiredFields() && !registrationRequiredFieldsComplete()
+    );
   }
 
   function updateInputAvailability() {
@@ -1527,7 +1637,8 @@
       const dial = await deriveDialCode(rawLocale);
       if (!dial) return;
       if (userFields.phone?.field) {
-        userFields.phone.field.dataset.dialPlaceholder = formatDialPlaceholder(dial);
+        userFields.phone.field.dataset.dialPlaceholder =
+          formatDialPlaceholder(dial);
       }
       renderRegistrationFields();
     } catch (_) {
@@ -1535,13 +1646,43 @@
     }
   }
 
+  function promptControlsBusy() {
+    return (
+      state.sending ||
+      state.typing ||
+      state.typewriting ||
+      state.introInProgress
+    );
+  }
+
+  function updatePromptToggleLabel() {
+    const label = state.promptsOpen ? t("hidePrompts") : t("showPrompts");
+    promptToggleBtn.setAttribute("aria-label", label);
+    promptToggleBtn.title = label;
+  }
+
   function renderSuggestions() {
+    const hasPrompts = state.promptOptions.length > 0;
+    const blocked =
+      needsUserDetails() ||
+      state.introInProgress ||
+      (state.conversationId && state.conversation.length === 0);
+    const afterFirstQuestion = hasUserMessage();
+    const showToggle = hasPrompts && !blocked && afterFirstQuestion;
+    const busy = promptControlsBusy();
+
+    if (!showToggle) state.promptsOpen = false;
+    promptToggleBtn.classList.toggle("hidden", !showToggle);
+    promptToggleBtn.classList.toggle("active", showToggle && state.promptsOpen);
+    promptToggleBtn.disabled = !showToggle || busy;
+    promptToggleBtn.setAttribute(
+      "aria-expanded",
+      String(showToggle && state.promptsOpen),
+    );
+    updatePromptToggleLabel();
+
     const show =
-      state.promptOptions.length > 0 &&
-      !needsUserDetails() &&
-      !state.introInProgress &&
-      !hasUserMessage() &&
-      !(state.conversationId && state.conversation.length === 0);
+      hasPrompts && !blocked && (!afterFirstQuestion || state.promptsOpen);
 
     suggestions.classList.toggle("hidden", !show);
     suggestionsTrack.innerHTML = "";
@@ -1553,9 +1694,10 @@
       button.className = "chat-widget-suggestion";
       button.textContent = prompt;
       button.title = prompt;
-      button.disabled = state.sending || state.typing || state.introInProgress;
+      button.disabled = busy;
       button.addEventListener("click", function () {
         if (button.disabled) return;
+        state.promptsOpen = false;
         input.value = "";
         sendMessage(prompt);
       });
@@ -1593,6 +1735,9 @@
     state.conversation.forEach(function (m) {
       const bubble = document.createElement("div");
       bubble.className = "chat-msg " + (m.role === "user" ? "user" : "agent");
+      if (m.role === "assistant" && m.typewriting) {
+        bubble.className += " typewriting";
+      }
       bubble.innerHTML = formatMarkdown(m.content);
       messages.appendChild(bubble);
     });
@@ -1662,9 +1807,144 @@
     });
   }
 
-  function addMessage(role, content) {
-    state.conversation.push({role: role, content: content});
-    renderMessages();
+  function createAssistantTypewriter() {
+    const runId = ++state.typewriterRunId;
+    const reducedMotion = reducedMotionEnabled();
+    let message = null;
+    let messageIndex = null;
+    let pendingChars = [];
+    let fullText = "";
+    let finished = false;
+    let pumpPromise = null;
+    let wakePump = null;
+
+    function wake() {
+      if (!wakePump) return;
+      const resolve = wakePump;
+      wakePump = null;
+      resolve();
+    }
+
+    function waitForMoreText() {
+      return new Promise(function (resolve) {
+        wakePump = resolve;
+      });
+    }
+
+    function ensureMessage() {
+      if (message) return;
+      state.typing = false;
+      state.typewriting = !reducedMotion;
+      message = {
+        role: "assistant",
+        content: "",
+        typewriting: !reducedMotion,
+      };
+      state.conversation.push(message);
+      messageIndex = state.conversation.length - 1;
+      updateInputAvailability();
+    }
+
+    async function pump() {
+      try {
+        while (!finished || pendingChars.length > 0) {
+          if (state.typewriterRunId !== runId) return messageIndex;
+          if (pendingChars.length === 0) {
+            await waitForMoreText();
+            continue;
+          }
+
+          ensureMessage();
+          const batchSize = assistantTypewriterBatchSize(fullText.length);
+          const batch = pendingChars.splice(0, batchSize).join("");
+          if (!batch) continue;
+
+          message.content += batch;
+          renderMessages();
+
+          const lastChar = Array.from(batch).pop() || "";
+          await wait(assistantCharacterDelay(lastChar));
+        }
+
+        if (message) {
+          message.content = fullText;
+          delete message.typewriting;
+        }
+        return messageIndex;
+      } finally {
+        if (state.typewriterRunId === runId) {
+          state.typewriting = false;
+        }
+        if (message) {
+          delete message.typewriting;
+        }
+        renderMessages();
+        updateInputAvailability();
+      }
+    }
+
+    function startPump() {
+      if (!pumpPromise && !reducedMotion) {
+        state.typewriting = true;
+        updateInputAvailability();
+        pumpPromise = pump();
+      }
+      return pumpPromise;
+    }
+
+    function append(text) {
+      const chunk = String(text || "");
+      if (!chunk) return;
+      fullText += chunk;
+
+      if (reducedMotion) {
+        ensureMessage();
+        message.content = fullText;
+        renderMessages();
+        return;
+      }
+
+      pendingChars = pendingChars.concat(Array.from(chunk));
+      startPump();
+      wake();
+    }
+
+    function finish(fallbackText) {
+      if (!fullText && fallbackText) {
+        append(fallbackText);
+      }
+      finished = true;
+
+      if (reducedMotion) {
+        if (fullText) {
+          ensureMessage();
+          message.content = fullText;
+          delete message.typewriting;
+        }
+        state.typewriting = false;
+        renderMessages();
+        updateInputAvailability();
+        return Promise.resolve(messageIndex);
+      }
+
+      if (!pumpPromise) startPump();
+      wake();
+      return pumpPromise || Promise.resolve(messageIndex);
+    }
+
+    return {
+      append,
+      finish,
+      getContent: function () {
+        return fullText;
+      },
+    };
+  }
+
+  async function addAssistantMessage(content) {
+    const writer = createAssistantTypewriter();
+    writer.append(content);
+    return writer.finish();
   }
 
   function mapMessages(entries) {
@@ -1685,6 +1965,23 @@
 
   function safeUrl(url) {
     const trimmed = (url || "").trim();
+    if (/^mailto:/i.test(trimmed)) {
+      const rawAddress = trimmed
+        .replace(/^mailto:/i, "")
+        .split("?")[0]
+        .trim();
+      let address = rawAddress;
+      try {
+        address = decodeURIComponent(rawAddress);
+      } catch (_) {
+        address = rawAddress;
+      }
+      if (/^[^@\s"'<>]+@[^@\s"'<>]+\.[^@\s"'<>]+$/.test(address)) {
+        return "mailto:" + encodeURIComponent(address);
+      }
+      return "";
+    }
+
     // quick reject for common injection patterns
     if (!/^https?:\/\/[^\s"'<>]+$/i.test(trimmed)) return "";
     try {
@@ -1718,7 +2015,7 @@
     working = working.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
     working = working.replace(
       /(^|[^*])\*([^*]+)\*(?=[^*]|$)/g,
-      "$1<em>$2</em>"
+      "$1<em>$2</em>",
     );
 
     // markdown links [text](url)
@@ -1734,7 +2031,7 @@
           label +
           "</a>"
         );
-      }
+      },
     );
 
     // auto-link plain URLs, but only in text (not inside tags)
@@ -1755,7 +2052,7 @@
                 safe +
                 "</a>"
               );
-            }
+            },
           );
         })
         .join("");
@@ -1796,7 +2093,7 @@
       const escaped = escapeHtml(code);
       working = working.replace(
         "__CODE_BLOCK_" + idx + "__",
-        "<pre><code>" + escaped + "</code></pre>"
+        "<pre><code>" + escaped + "</code></pre>",
       );
     });
 
@@ -1831,7 +2128,7 @@
           body: JSON.stringify(payload),
         });
       } else {
-        payload.agent = state.name || "Chatbot";
+        payload.agent = state.name || "Michaela";
         payload.conversation = mapMessages(newEntries);
         const resp = await fetch(host + "/api/agents/conversations/create", {
           method: "POST",
@@ -1918,7 +2215,7 @@
     state.agent = agentData;
     const chatbot = agentData.chatbot || {};
     const resolvedName =
-      chatbot.name || ds.agentName || agentData.agent?.name || "Chatbot";
+      chatbot.name || ds.agentName || agentData.agent?.name || "Michaela";
     state.name = resolvedName;
     state.colors = {
       primary: chatbot.primary_color || ds.primaryColor || state.colors.primary,
@@ -1929,10 +2226,10 @@
         chatbot.button_background_color ||
         ds.buttonColor ||
         state.colors.button ||
-        "#A8C957",
+        "#6e26f5",
     };
     state.avatar = resolveWidgetAssetUrl(
-      chatbot.avatar || ds.avatar || state.avatar
+      chatbot.avatar || ds.avatar || state.avatar,
     );
     state.greeting =
       pickLocalized(chatbot.greeting, state.lang) ||
@@ -1945,11 +2242,13 @@
       ds.startingMessage ||
       state.starting;
     state.registration = normalizeRegistrationConfig(
-      agentData.settings?.registration || chatbot.registration
+      agentData.settings?.registration || chatbot.registration,
     );
     state.mapboxToken = String(agentData.settings?.mapboxToken || "").trim();
     const serverTracking = {
-      countryCode: String(agentData.tracking?.countryCode || "").trim().toUpperCase(),
+      countryCode: String(agentData.tracking?.countryCode || "")
+        .trim()
+        .toUpperCase(),
       latitude: agentData.tracking?.latitude || "",
       longitude: agentData.tracking?.longitude || "",
     };
@@ -1971,7 +2270,7 @@
     }
 
     updateAvatarMediaAll(state.avatar, state.name);
-    headerName.textContent = state.name || "Chatbot";
+    headerName.textContent = state.name || "Michaela";
     setColors();
     renderRegistrationFields();
     toggleUserOverlay();
@@ -1996,18 +2295,28 @@
     renderMessages();
     setLoading(true);
     try {
+      const userPayload = getRegistrationUserPayload();
+      const streamPayload = {
+        lang: state.lang,
+        source: "widget",
+        messages: state.conversation.map(function (m) {
+          return {
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content,
+          };
+        }),
+      };
+      if (state.conversationId) {
+        streamPayload.conversation_id = state.conversationId;
+      }
+      if (userPayload) {
+        streamPayload.user = userPayload;
+      }
+
       const res = await fetch(host + "/api/agents/chat/stream", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          lang: state.lang,
-          messages: state.conversation.map(function (m) {
-            return {
-              role: m.role === "assistant" ? "assistant" : "user",
-              content: m.content,
-            };
-          }),
-        }),
+        body: JSON.stringify(streamPayload),
       });
 
       if (!res.ok || !res.body || !res.body.getReader) {
@@ -2019,7 +2328,7 @@
           data?.message ||
           t("fallback");
         state.typing = false;
-        addMessage("assistant", reply);
+        await addAssistantMessage(reply);
         persistConversation([
           {role: "user", content: text},
           {role: "assistant", content: reply},
@@ -2032,22 +2341,12 @@
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let streamDone = false;
-      let gotChunk = false;
-      let assistantIndex = null;
+      const assistantWriter = createAssistantTypewriter();
 
       function commitChunk(chunkText) {
         if (!chunkText) return;
-        if (!gotChunk) {
-          gotChunk = true;
-          state.typing = false;
-        }
-        if (assistantIndex === null) {
-          state.conversation.push({role: "assistant", content: chunkText});
-          assistantIndex = state.conversation.length - 1;
-        } else {
-          state.conversation[assistantIndex].content += chunkText;
-        }
-        renderMessages();
+        state.typing = false;
+        assistantWriter.append(chunkText);
       }
 
       // Keep showing typing until the first token arrives.
@@ -2085,28 +2384,19 @@
       }
 
       state.typing = false;
-      renderMessages();
-      if (!gotChunk && state.conversation.length > 0) {
-        // fallback: ensure we have at least an assistant message
-        state.conversation.push({role: "assistant", content: t("fallback")});
-        assistantIndex = state.conversation.length - 1;
-        renderMessages();
-      }
+      await assistantWriter.finish(t("fallback"));
+
       // Persist conversation (user + assistant reply)
       persistConversation([
         {role: "user", content: text},
         {
           role: "assistant",
-          content:
-            assistantIndex !== null
-              ? state.conversation[assistantIndex]?.content || ""
-              : state.conversation[state.conversation.length - 1]?.content ||
-                "",
+          content: assistantWriter.getContent() || t("fallback"),
         },
       ]);
     } catch (e) {
       state.typing = false;
-      addMessage("assistant", t("error"));
+      await addAssistantMessage(t("error"));
     } finally {
       setLoading(false);
     }
@@ -2133,6 +2423,12 @@
 
   clearLink.addEventListener("click", function () {
     startNewConversationFlow();
+  });
+
+  promptToggleBtn.addEventListener("click", function () {
+    if (promptToggleBtn.disabled) return;
+    state.promptsOpen = !state.promptsOpen;
+    renderSuggestions();
   });
 
   userForm.addEventListener("submit", function (e) {
@@ -2167,9 +2463,11 @@
       }
     });
 
-    const emailVisible = visibleRegistrationFields().some(function (definition) {
-      return definition.key === "email";
-    });
+    const emailVisible = visibleRegistrationFields().some(
+      function (definition) {
+        return definition.key === "email";
+      },
+    );
     const email = String(nextUser.email || "").trim();
     if (emailVisible && email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       errors.push(t("emailInvalid"));
@@ -2238,7 +2536,7 @@
     await Promise.all(
       promises.map(function (promise) {
         return Promise.resolve(promise).catch(function () {});
-      })
+      }),
     );
   }
 
@@ -2258,7 +2556,7 @@
     }
 
     const translationsPromise = loadExternalTranslations(state.lang).then(
-      applyTranslations
+      applyTranslations,
     );
     const phonePlaceholderPromise = setPhonePlaceholder();
     const defaultQuestionsPromise = loadDefaultQuestions();
@@ -2268,8 +2566,8 @@
     if (agentData) {
       parseAgent(agentData);
     } else {
-      updateAvatarMediaAll(state.avatar, state.name || "Chatbot");
-      headerName.textContent = state.name || "Chatbot";
+      updateAvatarMediaAll(state.avatar, state.name || "Michaela");
+      headerName.textContent = state.name || "Michaela";
       setColors();
       renderRegistrationFields();
       toggleUserOverlay();

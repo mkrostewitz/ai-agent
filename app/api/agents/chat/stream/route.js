@@ -8,6 +8,13 @@ import {
   hasMongoConfig,
 } from "@/app/lib/mongo";
 import {
+  contactInfoResponse,
+  contactRequestResponse,
+  detectContactIntent,
+  ownerContactFromProfile,
+  sendContactRequestNotification,
+} from "@/app/lib/contactRequests";
+import {
   knowledgeNamespaceMatch,
   vectorNamespaceFilter,
 } from "@/app/lib/knowledgeNamespace";
@@ -19,6 +26,7 @@ const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const SETTINGS_COLLECTION =
   process.env.MONGODB_SETTINGS_COLLECTION || "settings";
 const USERS_COLLECTION = process.env.MONGODB_USERS_COLLECTION || "users";
+const CHATBOT_COLLECTION = process.env.MONGODB_CHATBOT_COLLECTION || "chatbot";
 const EMBEDDINGS_COLLECTION =
   process.env.MONGODB_DEFAULT_EMBEDDING_COLLECTION ||
   process.env.MONGODB_COLLECTION ||
@@ -26,6 +34,8 @@ const EMBEDDINGS_COLLECTION =
 const VECTOR_INDEX = process.env.MONGODB_INDEX || "vector_index";
 const DEFAULT_RETRIEVAL_K = Number(process.env.RAG_TOP_K || 6);
 const CURRENT_YEAR = new Date().getFullYear();
+const CONTACT_LINK_REGEX =
+  /(contact|kontakt|contatt|impressum|ansprechpartner|e-?mail|email|phone|telefon)/i;
 
 export function OPTIONS() {
   return widgetOptionsResponse();
@@ -38,29 +48,64 @@ function cleanString(value) {
 function normalizeOwnerProfile(user) {
   if (!user) return null;
 
-  const firstName = cleanString(user.firstName);
-  const lastName = cleanString(user.lastName);
+  const type = user.type === "company" ? "company" : "person";
+  const firstName = cleanString(user.first_name || user.firstName);
+  const lastName = cleanString(user.last_name || user.lastName);
+  const companyName = cleanString(
+    user.company_name || user.companyName || user.company
+  );
   const fullName =
-    cleanString(user.name) ||
-    [firstName, lastName].filter(Boolean).join(" ") ||
-    cleanString(user.email);
+    type === "company"
+      ? companyName || cleanString(user.fullName || user.name)
+      : cleanString(user.fullName || user.name) ||
+        [firstName, lastName].filter(Boolean).join(" ") ||
+        companyName ||
+        cleanString(user.email);
 
   if (!fullName) return null;
 
   return {
+    type,
+    email: cleanString(user.email).toLowerCase(),
     firstName,
     lastName,
+    companyName,
     fullName,
   };
 }
 
+function mergeOwnerProfiles(primary, fallback) {
+  const preferred = normalizeOwnerProfile(primary);
+  const secondary = normalizeOwnerProfile(fallback);
+
+  if (!preferred && !secondary) return null;
+  if (!preferred) return secondary;
+  if (!secondary) return preferred;
+
+  return {
+    ...secondary,
+    ...preferred,
+    email: preferred.email || secondary.email,
+    firstName: preferred.firstName || secondary.firstName,
+    lastName: preferred.lastName || secondary.lastName,
+    companyName: preferred.companyName || secondary.companyName,
+    fullName: preferred.fullName || secondary.fullName,
+  };
+}
+
 function buildStandardInstruction(profile, instruction) {
-  const configuredName = profile?.fullName || "the configured person";
+  const isCompany = profile?.type === "company";
+  const configuredName =
+    profile?.fullName || (isCompany ? "the configured company" : "the configured person");
+  const ownerLabel = isCompany ? "company" : "person";
   const firstNameLine = profile?.firstName
     ? `- First name: ${profile.firstName}`
     : "";
   const lastNameLine = profile?.lastName
     ? `- Last name: ${profile.lastName}`
+    : "";
+  const companyNameLine = profile?.companyName
+    ? `- Company name: ${profile.companyName}`
     : "";
   const adminInstruction =
     typeof instruction === "string" && instruction.trim()
@@ -69,19 +114,20 @@ function buildStandardInstruction(profile, instruction) {
           "Additional administrator instructions:",
           instruction.trim(),
           "",
-          "Apply the additional administrator instructions only when they do not conflict with the configured person or the source-context rules above.",
+          `Apply the additional administrator instructions only when they do not conflict with the configured ${ownerLabel} or the source-context rules above.`,
         ].join("\n")
       : "";
 
   return [
-    `You are the professional personal assistant for ${configuredName}.`,
-    "Represent the configured person using the first and last name captured during setup.",
-    "Configured person:",
+    `You are the professional assistant for ${configuredName}.`,
+    `Represent the configured ${ownerLabel} using the owner profile captured in Manage Agent.`,
+    `Configured ${ownerLabel}:`,
     `- Full name: ${configuredName}`,
     firstNameLine,
     lastNameLine,
+    companyNameLine,
     "",
-    "Use uploaded CVs, resumes, and indexed website data as the source of truth for the person's professional background.",
+    "Use uploaded CVs, resumes, company material, and indexed website data as the source of truth for the configured profile.",
     "For background, career, and experience questions, answer in reverse chronological order: current/latest positions first, then the next most recent roles.",
     "For current-role, current-engagement, current-activity, or current-focus questions, answer only with the current/latest engagement. Do not include previous roles unless the user explicitly asks for background, career history, or experience.",
     "For broad background questions, include the current/latest organization(s) plus the next three distinct prior organizations when they are present in the CV context.",
@@ -224,15 +270,23 @@ function isIdentityQuestion(text) {
 }
 
 function identityForLang(lang, profile) {
-  const fullName = profile?.fullName || "the configured person";
+  const isCompany = profile?.type === "company";
+  const fullName =
+    profile?.fullName || (isCompany ? "the configured company" : "the configured person");
   const base = normalizeLang(lang)?.slice(0, 2);
   if (base === "de") {
-    return `Ich bin der digitale persönliche Assistent von ${fullName}.`;
+    return isCompany
+      ? `Ich bin der digitale Assistent von ${fullName}.`
+      : `Ich bin der digitale persönliche Assistent von ${fullName}.`;
   }
   if (base === "it") {
-    return `Sono l'assistente personale digitale di ${fullName}.`;
+    return isCompany
+      ? `Sono l'assistente digitale di ${fullName}.`
+      : `Sono l'assistente personale digitale di ${fullName}.`;
   }
-  return `I am the digital personal assistant for ${fullName}.`;
+  return isCompany
+    ? `I am the digital assistant for ${fullName}.`
+    : `I am the digital personal assistant for ${fullName}.`;
 }
 
 function createSseTextResponse(text) {
@@ -268,6 +322,54 @@ function enqueueSseDelta(controller, encoder, content) {
 
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderOwnerProfileTemplate(template, profile) {
+  let text = String(template || "");
+  const owner = normalizeOwnerProfile(profile) || {};
+  const fields = [
+    {
+      aliases: ["OwnerName", "ownerName", "owner_name", "AgentOwnerName"],
+      value: owner.fullName || "",
+    },
+    {
+      aliases: [
+        "OwnerFirstName",
+        "ownerFirstName",
+        "owner_first_name",
+        "AgentOwnerFirstName",
+      ],
+      value: owner.firstName || "",
+    },
+    {
+      aliases: [
+        "OwnerLastName",
+        "ownerLastName",
+        "owner_last_name",
+        "AgentOwnerLastName",
+      ],
+      value: owner.lastName || "",
+    },
+    {
+      aliases: [
+        "OwnerCompany",
+        "OwnerCompanyName",
+        "ownerCompany",
+        "owner_company",
+        "ownerCompanyName",
+        "company_name",
+      ],
+      value: owner.companyName || "",
+    },
+  ];
+
+  fields.forEach((field) => {
+    const aliases = field.aliases.map(escapeRegExp).join("|");
+    const pattern = new RegExp(`\\{\\{\\s*(?:${aliases})\\s*\\}\\}`, "gi");
+    text = text.replace(pattern, field.value);
+  });
+
+  return text.replace(/[ \t]{2,}/g, " ").trim();
 }
 
 function looseTextPattern(value) {
@@ -437,6 +539,15 @@ function metadataString(metadata, key) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isPublicUrl(value) {
+  try {
+    const url = new URL(cleanString(value));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+}
+
 function mapContextDocument(doc) {
   const text = typeof doc?.pageContent === "string" ? doc.pageContent.trim() : "";
   const metadata = doc?.metadata || {};
@@ -446,6 +557,7 @@ function mapContextDocument(doc) {
     source: metadataString(metadata, "source"),
     sourceType: metadataString(metadata, "sourceType"),
     title: metadataString(metadata, "title"),
+    url: metadataString(metadata, "url"),
   };
 }
 
@@ -550,7 +662,7 @@ async function loadRuntimeConfig() {
     await client.connect();
     console.log("[mongo] Connected: /api/agents/chat/stream (runtime-config)");
     const db = client.db(getMongoDbName());
-    const [settings, user] = await Promise.all([
+    const [settings, user, chatbot] = await Promise.all([
       db
         .collection(SETTINGS_COLLECTION)
         .findOne(
@@ -576,10 +688,17 @@ async function loadRuntimeConfig() {
           sort: {createdAt: 1, updatedAt: 1},
         }
       ),
+      db.collection(CHATBOT_COLLECTION).findOne(
+        {},
+        {
+          projection: {_id: 0, owner_profile: 1},
+          sort: {updatedAt: -1, createdAt: -1},
+        }
+      ),
     ]);
 
     return {
-      profile: normalizeOwnerProfile(user),
+      profile: mergeOwnerProfiles(chatbot?.owner_profile, user),
       settings,
     };
   } catch (error) {
@@ -663,6 +782,117 @@ async function retrieveContext(question, namespace, retrievalK) {
   }
 }
 
+function contactLinkFromDocument(doc = {}) {
+  const metadata = metadataObject(doc.metadata);
+  const candidates = [
+    metadataString(metadata, "url"),
+    metadataString(metadata, "source"),
+    cleanString(doc.url),
+    cleanString(doc.source),
+  ];
+  const url = candidates.find(isPublicUrl);
+  if (!url) return null;
+
+  const text = cleanString(doc.text);
+  const title = cleanString(doc.title || metadataString(metadata, "title"));
+  const sourceType = cleanString(
+    doc.sourceType || metadataString(metadata, "sourceType")
+  );
+  const lowerUrl = url.toLowerCase();
+  const lowerTitle = title.toLowerCase();
+  const hasContactText =
+    /(contact|kontakt|contatt|impressum|ansprechpartner)/i.test(text);
+  const hasChannelText = /(e-?mail|email|phone|telefon)/i.test(text);
+  let score = 0;
+
+  if (
+    /(^|[/?#&=_-])(contact|kontakt|contatti|contatto|impressum)([/?#&=_-]|$)/i.test(
+      lowerUrl
+    )
+  ) {
+    score += 120;
+  } else if (/(contact|kontakt|contatt|impressum)/i.test(lowerUrl)) {
+    score += 90;
+  }
+  if (/(contact|kontakt|contatt|impressum|ansprechpartner)/i.test(lowerTitle)) {
+    score += 70;
+  }
+  if (hasContactText) {
+    score += 10;
+  }
+  if (hasChannelText) {
+    score += 5;
+  }
+  if (hasContactText && hasChannelText) {
+    score += 45;
+  }
+  if (sourceType === "page") {
+    score += 3;
+  }
+
+  return score >= 50 ? {score, title, url} : null;
+}
+
+async function findContactLink(namespace) {
+  let client;
+  try {
+    if (!hasMongoConfig()) return "";
+
+    client = createMongoClient();
+    await client.connect();
+    console.log("[mongo] Connected: /api/agents/chat/stream (contact-link)");
+
+    const db = client.db(getMongoDbName());
+    const collection = db.collection(EMBEDDINGS_COLLECTION);
+    const contactQuery = {
+      $or: [
+        {source: CONTACT_LINK_REGEX},
+        {"metadata.source": CONTACT_LINK_REGEX},
+        {"metadata.url": CONTACT_LINK_REGEX},
+        {title: CONTACT_LINK_REGEX},
+        {"metadata.title": CONTACT_LINK_REGEX},
+        {text: CONTACT_LINK_REGEX},
+      ],
+    };
+    const namespaceQuery = namespace ? knowledgeNamespaceMatch(namespace) : {};
+    const query = Object.keys(namespaceQuery).length
+      ? {$and: [namespaceQuery, contactQuery]}
+      : contactQuery;
+
+    const documents = await collection
+      .find(query, {
+        projection: {
+          source: 1,
+          sourceType: 1,
+          text: 1,
+          title: 1,
+          url: 1,
+          "metadata.source": 1,
+          "metadata.sourceType": 1,
+          "metadata.title": 1,
+          "metadata.url": 1,
+        },
+      })
+      .limit(80)
+      .toArray();
+
+    const best = documents
+      .map(contactLinkFromDocument)
+      .filter(Boolean)
+      .sort((left, right) => right.score - left.score)[0];
+
+    return best?.url || "";
+  } catch (error) {
+    console.warn("Chat stream: contact link lookup failed", {
+      message: error?.message || String(error),
+      namespace: namespace || null,
+    });
+    return "";
+  } finally {
+    if (client) await client.close();
+  }
+}
+
 export async function POST(req) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -680,7 +910,8 @@ export async function POST(req) {
     const runtimeConfig = await loadRuntimeConfig();
     const settings = runtimeConfig.settings || {};
     const profile = runtimeConfig.profile;
-    const question = getLatestUserQuestion(messages);
+    const rawQuestion = getLatestUserQuestion(messages);
+    const question = renderOwnerProfileTemplate(rawQuestion, profile);
     if (!question) {
       return withWidgetCors(
         NextResponse.json(
@@ -710,12 +941,62 @@ export async function POST(req) {
       detectQuestionLanguage(question) ||
       normalizeLang(body?.lang) ||
       normalizeLang(body?.locale);
+    const contactIntent = detectContactIntent(question, {messages});
     console.log("[rag] request", {
       namespace: namespace || null,
       retrievalK,
       responseLang: responseLang || null,
+      contactIntent: contactIntent || null,
       questionPreview: question.slice(0, 120),
     });
+
+    if (contactIntent) {
+      const contactUrl = await findContactLink(namespace);
+      const owner = {
+        ...ownerContactFromProfile(profile),
+        contactUrl,
+      };
+
+      if (contactIntent === "info") {
+        return createSseTextResponse(
+          contactInfoResponse({
+            lang: responseLang,
+            owner,
+            user: body?.user,
+          })
+        );
+      }
+
+      try {
+        const result = await sendContactRequestNotification({
+          conversationId: body?.conversation_id,
+          messages,
+          ownerProfile: profile,
+          question,
+          source: body?.source || "widget",
+          user: body?.user,
+        });
+
+        return createSseTextResponse(
+          contactRequestResponse({
+            lang: responseLang,
+            owner: {...result.owner, contactUrl: result.owner?.contactUrl || contactUrl},
+            result,
+            user: result.user,
+          })
+        );
+      } catch (error) {
+        console.error("Contact request email error:", error);
+        return createSseTextResponse(
+          contactRequestResponse({
+            lang: responseLang,
+            owner,
+            result: {ok: false, reason: "send_failed"},
+            user: body?.user,
+          })
+        );
+      }
+    }
 
     if (
       isIdentityQuestion(question) &&

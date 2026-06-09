@@ -16,6 +16,8 @@
     "ChatWidget": {
       "send": "Send",
       "placeholder": "Type your message...",
+      "showPrompts": "Show prompts",
+      "hidePrompts": "Hide prompts",
       "notConfigured": "This agent is not fully configured yet.",
       "error": "Sorry, something went wrong. Please try again.",
       "fallback": "I am here to help.",

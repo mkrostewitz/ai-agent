@@ -16,6 +16,8 @@
     "ChatWidget": {
       "send": "Senden",
       "placeholder": "Nachricht eingeben...",
+      "showPrompts": "Prompts anzeigen",
+      "hidePrompts": "Prompts ausblenden",
       "notConfigured": "Dieser Agent ist noch nicht vollständig konfiguriert.",
       "error": "Entschuldigung, etwas ist schiefgelaufen. Bitte erneut versuchen.",
       "fallback": "Ich helfe gerne weiter.",
