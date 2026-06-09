@@ -9,27 +9,33 @@ const CHATBOT_COLLECTION = process.env.MONGODB_CHATBOT_COLLECTION || "chatbot";
 
 const DEFAULT_OWNER_PROFILE = {
   type: "person",
-  first_name: "",
-  last_name: "",
+  first_name: "Jon",
+  last_name: "Krostewitz",
   company_name: "",
 };
 
 const DEFAULT_AGENT = {
-  name: "Chatbot",
+  name: "Michaela",
   owner_profile: DEFAULT_OWNER_PROFILE,
-  avatar: "/avatars/Michael_Intro.mp4",
+  avatar: "/avatars/Michelle_Intro.mp4",
   primary_color: "#6e26f5",
   secondary_color: "#0e273d",
   button_color: "#6e26f5",
   greeting: [
-    {lang: "en", text: "Hi there!"},
-    {lang: "de", text: "Hallo!"},
-    {lang: "it", text: "Ciao!"},
+    {lang: "en", text: "Hi there, I am Michaela!"},
+    {lang: "de", text: "Hallo, Michaela hier!"},
+    {lang: "it", text: "Ciao, sono Michaela."},
   ],
   starting_message: [
-    {lang: "en", text: "How can I help today?"},
-    {lang: "de", text: "Wie kann ich heute helfen?"},
-    {lang: "it", text: "Come posso aiutarti oggi?"},
+    {
+      lang: "en",
+      text: "Hi {{FName}}, I am Michaela, the AI assistant for Jon. How can I help today?",
+    },
+    {
+      lang: "de",
+      text: "Hallo {{FName}}, ich bin die KI Assistentin von Jon. Wie kann ich dir heute helfen?",
+    },
+    {lang: "it", text: "Ciao, {{FName}}, come posso aiutarti oggi?"},
   ],
 };
 
@@ -58,7 +64,7 @@ function normalizeOwnerProfile(value = {}) {
     first_name: cleanString(source.first_name || source.firstName),
     last_name: cleanString(source.last_name || source.lastName),
     company_name: cleanString(
-      source.company_name || source.companyName || source.company
+      source.company_name || source.companyName || source.company,
     ),
   };
 }
@@ -76,14 +82,15 @@ function normalizeAgent(input = {}) {
     name: cleanString(input.name) || DEFAULT_AGENT.name,
     owner_profile: normalizeOwnerProfile(input.owner_profile),
     avatar: cleanString(input.avatar) || DEFAULT_AGENT.avatar,
-    primary_color: cleanString(input.primary_color) || DEFAULT_AGENT.primary_color,
+    primary_color:
+      cleanString(input.primary_color) || DEFAULT_AGENT.primary_color,
     secondary_color:
       cleanString(input.secondary_color) || DEFAULT_AGENT.secondary_color,
     button_color: cleanString(input.button_color) || DEFAULT_AGENT.button_color,
     greeting: normalizeLocalizedEntries(input.greeting, DEFAULT_AGENT.greeting),
     starting_message: normalizeLocalizedEntries(
       input.starting_message,
-      DEFAULT_AGENT.starting_message
+      DEFAULT_AGENT.starting_message,
     ),
   };
 }
@@ -96,14 +103,17 @@ export async function GET(request) {
     const db = await getDb();
     const doc = await db
       .collection(CHATBOT_COLLECTION)
-      .findOne({}, {projection: {_id: 0}, sort: {updatedAt: -1, createdAt: -1}});
+      .findOne(
+        {},
+        {projection: {_id: 0}, sort: {updatedAt: -1, createdAt: -1}},
+      );
 
     return NextResponse.json({agent: mergeAgentDefaults(doc)});
   } catch (error) {
     console.error("Admin agent GET error:", error);
     return NextResponse.json(
       {error: "Unable to load agent profile."},
-      {status: 500}
+      {status: 500},
     );
   }
 }
@@ -119,14 +129,14 @@ export async function PUT(request) {
     const collection = db.collection(CHATBOT_COLLECTION);
     const existing = await collection.findOne(
       {},
-      {projection: {_id: 1}, sort: {updatedAt: -1, createdAt: -1}}
+      {projection: {_id: 1}, sort: {updatedAt: -1, createdAt: -1}},
     );
     const now = new Date();
 
     if (existing?._id) {
       await collection.updateOne(
         {_id: existing._id},
-        {$set: {...agent, updatedAt: now}}
+        {$set: {...agent, updatedAt: now}},
       );
     } else {
       await collection.insertOne({
@@ -142,7 +152,7 @@ export async function PUT(request) {
     console.error("Admin agent PUT error:", error);
     return NextResponse.json(
       {error: "Unable to save agent profile."},
-      {status: 500}
+      {status: 500},
     );
   }
 }

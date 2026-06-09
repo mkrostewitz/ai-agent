@@ -9,11 +9,23 @@ import {FiSend, FiUser, FiCpu} from "react-icons/fi";
 import {useI18n} from "../i18n/useI18n";
 
 const DEFAULT_AGENT = {
-  name: "Chatbot",
-  avatar: "/avatars/Michael_Intro.mp4",
+  name: "Michaela",
+  avatar: "/avatars/Michelle_Intro.mp4",
+  greeting: [
+    {lang: "en", text: "Hi there, I am Michaela!"},
+    {lang: "de", text: "Hallo, Michaela hier!"},
+    {lang: "it", text: "Ciao, sono Michaela."},
+  ],
   starting_message: [
-    {lang: "en", text: "How can I help today?"},
-    {lang: "de", text: "Wie kann ich heute helfen?"},
+    {
+      lang: "en",
+      text: "Hi {{FName}}, I am Michaela, the AI assistant for Jon. How can I help today?",
+    },
+    {
+      lang: "de",
+      text: "Hallo {{FName}}, ich bin die KI Assistentin von Jon. Wie kann ich dir heute helfen?",
+    },
+    {lang: "it", text: "Ciao, {{FName}}, come posso aiutarti oggi?"},
   ],
 };
 
@@ -96,7 +108,7 @@ function buildIntroContent(agent, lang, fallbackLocale) {
     pickLocalizedText(agent?.starting_message, lang, fallbackLocale) ||
     pickLocalizedText(agent?.greeting, lang, fallbackLocale) ||
     pickLocalizedText(DEFAULT_AGENT.starting_message, lang, fallbackLocale) ||
-    "How can I help today?";
+    "Hi {{FName}}, I am Michaela, the AI assistant for Jon. How can I help today?";
 
   return renderRegistrationTemplate(intro);
 }
@@ -378,7 +390,7 @@ const ChatStream = () => {
       const response = await fetch("/api/agents/chat/stream", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({messages: payloadMessages}),
+        body: JSON.stringify({lang, messages: payloadMessages}),
       });
 
       if (!response.ok) {

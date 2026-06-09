@@ -234,7 +234,7 @@
     name: ds.agentName || "Michaela",
     greeting: "Hi there, I am Michaela!",
     starting:
-      "Hi {{FName}}, I am Michaela, the AI assistant for Mathias. How can I help today?",
+      "Hi {{FName}}, I am Michaela, the AI assistant for Jon. How can I help today?",
     avatar: host + "/avatars/Michelle_Intro.mp4",
     mapboxToken: "",
     tracking: {

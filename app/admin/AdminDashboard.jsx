@@ -91,10 +91,32 @@ const OWNER_PROFILE_TYPES = [
 
 const DEFAULT_OWNER_PROFILE = {
   type: "person",
-  first_name: "",
-  last_name: "",
+  first_name: "Jon",
+  last_name: "Krostewitz",
   company_name: "",
 };
+
+const DEFAULT_INSTRUCTION = [
+  "Answer as a professional personal assistant for Jon Doe.",
+  "Use the uploaded CVs, resumes, indexed website data, and AI Chat Knowledge Base as the source of truth.",
+  "Use the AI Chat Knowledge Base for positioning, tone, preferred wording, IN2TEC, Schlegel, roles, availability, and contact guidance.",
+  "Use the CVs and resumes for facts, dates, roles, companies, markets, industries, and achievements.",
+  "Answer naturally and professionally. Do not answer with only a bare list unless the user specifically asks for a list.",
+  [
+    "For most answers:",
+    "* Start with one direct sentence.",
+    "* Add 2 to 4 useful details.",
+    "* Keep the answer concise but complete.",
+  ].join("\n"),
+  "For background and career questions, answer in reverse chronological order: current roles first, then recent prior roles.",
+  "For broad background answers, include the current/latest organization(s) plus the next three distinct prior organizations when relevant.",
+  "Mention early-career roles only when directly relevant or explicitly requested.",
+  "Position Jon as a hands-on business builder, market-entry specialist, and entrepreneurial operator who connects strategy, sales, operations, leadership, and digital systems.",
+  "Do not make Jon sound like a pure consultant, pure software developer, or someone focused only on U.S. market entry.",
+  "Do not suggest long-term relocation to the U.S. or China. Jon is based in Germany, open to frequent international travel, and open to temporary project assignments.",
+  "Use only the provided context. If the answer is not available, say so briefly and suggest contacting Jon.",
+  "When a visitor wants to get in touch, offer the configured contact email/contact section or forward a contact request if visitor details are available.",
+].join("\n\n");
 
 const OWNER_PROFILE_FIELD_TOKENS = [
   {key: "owner_name", label: "Full name", token: "{{OwnerName}}"},
@@ -116,12 +138,12 @@ const DEFAULT_REGISTRATION_SETTINGS = {
 };
 
 const DEFAULT_SETTINGS = {
-  instruction: "",
+  instruction: DEFAULT_INSTRUCTION,
   model: "phi3:mini",
   namespace: "",
   response_language: "",
   retrieval_k: 6,
-  temperature: 0.3,
+  temperature: 0.2,
   top_k: 40,
   top_p: 0.9,
   max_tokens: 2000,
@@ -224,14 +246,28 @@ const MAIL_PROVIDER_PRESETS = {
 };
 
 const DEFAULT_AGENT = {
-  name: "Chatbot",
+  name: "Michaela",
   owner_profile: DEFAULT_OWNER_PROFILE,
-  avatar: "/avatars/Michael_Intro.mp4",
+  avatar: "/avatars/Michelle_Intro.mp4",
   primary_color: "#6e26f5",
   secondary_color: "#0e273d",
   button_color: "#6e26f5",
-  greeting: LANGUAGES.map(({code}) => ({lang: code, text: ""})),
-  starting_message: LANGUAGES.map(({code}) => ({lang: code, text: ""})),
+  greeting: [
+    {lang: "en", text: "Hi there, I am Michaela!"},
+    {lang: "de", text: "Hallo, Michaela hier!"},
+    {lang: "it", text: "Ciao, sono Michaela."},
+  ],
+  starting_message: [
+    {
+      lang: "en",
+      text: "Hi {{FName}}, I am Michaela, the AI assistant for Jon. How can I help today?",
+    },
+    {
+      lang: "de",
+      text: "Hallo {{FName}}, ich bin die KI Assistentin von Jon. Wie kann ich dir heute helfen?",
+    },
+    {lang: "it", text: "Ciao, {{FName}}, come posso aiutarti oggi?"},
+  ],
 };
 
 const CONVERSATION_STATUSES = [
@@ -256,11 +292,11 @@ const CONVERSATION_STATUS_LABELS = Object.fromEntries(
   CONVERSATION_STATUSES.filter((status) => status.value).map((status) => [
     status.value,
     status.label,
-  ])
+  ]),
 );
 
 const CONVERSATION_ACTION_TYPE_LABELS = Object.fromEntries(
-  CONVERSATION_ACTION_TYPES.map((type) => [type.value, type.label])
+  CONVERSATION_ACTION_TYPES.map((type) => [type.value, type.label]),
 );
 
 const NUMBER_FORMATTER = new Intl.NumberFormat("en");
@@ -293,7 +329,10 @@ function formatMonth(value) {
 
 function percentOf(value, total) {
   if (!total) return 0;
-  return Math.max(0, Math.min(100, Math.round((Number(value || 0) / total) * 100)));
+  return Math.max(
+    0,
+    Math.min(100, Math.round((Number(value || 0) / total) * 100)),
+  );
 }
 
 function localizedValue(entries, lang) {
@@ -305,13 +344,15 @@ function setLocalizedValue(entries, lang, text) {
   const existing = Array.isArray(entries) ? entries : [];
   const withoutLang = existing.filter((entry) => entry.lang !== lang);
   return [...withoutLang, {lang, text}].sort((left, right) =>
-    left.lang.localeCompare(right.lang)
+    left.lang.localeCompare(right.lang),
   );
 }
 
 function normalizeOwnerProfileDraft(profile = {}) {
   const source =
-    profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {};
+    profile && typeof profile === "object" && !Array.isArray(profile)
+      ? profile
+      : {};
   const type = source.type === "company" ? "company" : "person";
 
   return {
@@ -319,7 +360,7 @@ function normalizeOwnerProfileDraft(profile = {}) {
     first_name: String(source.first_name || source.firstName || "").trim(),
     last_name: String(source.last_name || source.lastName || "").trim(),
     company_name: String(
-      source.company_name || source.companyName || source.company || ""
+      source.company_name || source.companyName || source.company || "",
     ).trim(),
   };
 }
@@ -336,7 +377,7 @@ function createPromptDraft(prompt = {}) {
   const translations = {};
   LANGUAGES.forEach((language) => {
     translations[language.code] = String(
-      prompt.translations?.[language.code] || ""
+      prompt.translations?.[language.code] || "",
     );
   });
 
@@ -365,12 +406,14 @@ function setPromptLocalizedValue(prompts, index, lang, text) {
             [lang]: text,
           },
         }
-      : prompt
+      : prompt,
   );
 }
 
 function normalizeEmbedHost(value) {
-  const host = String(value || "").trim().replace(/\/+$/, "");
+  const host = String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
   return host || DEFAULT_EMBED_HOST;
 }
 
@@ -468,14 +511,15 @@ function buildSystemPayload(system = {}) {
 
 function normalizeRegistrationDraft(registration = {}) {
   const fields = REGISTRATION_FIELDS.reduce((result, field) => {
-    const defaultField =
-      DEFAULT_REGISTRATION_SETTINGS.fields[field.key] || {
-        show: false,
-        required: false,
-      };
+    const defaultField = DEFAULT_REGISTRATION_SETTINGS.fields[field.key] || {
+      show: false,
+      required: false,
+    };
     const currentField = registration?.fields?.[field.key] || {};
     const show =
-      typeof currentField.show === "boolean" ? currentField.show : defaultField.show;
+      typeof currentField.show === "boolean"
+        ? currentField.show
+        : defaultField.show;
 
     result[field.key] = {
       show,
@@ -501,7 +545,9 @@ function normalizeRegistrationDraft(registration = {}) {
 function normalizeLocation(tracking = {}) {
   return (
     tracking.address ||
-    [tracking.city, tracking.state, tracking.country].filter(Boolean).join(", ") ||
+    [tracking.city, tracking.state, tracking.country]
+      .filter(Boolean)
+      .join(", ") ||
     tracking.countryCode ||
     "Unknown"
   );
@@ -529,7 +575,7 @@ function getCoordinatePair(tracking = {}) {
   const longitude = parseCoordinate(
     tracking.longitude ?? tracking.lng ?? tracking.lon,
     -180,
-    180
+    180,
   );
 
   if (latitude === null || longitude === null) return null;
@@ -575,7 +621,9 @@ function conversationActions(conversation = {}) {
 }
 
 function actionTextPreview(value) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) return "No actions";
   return text.length > 120 ? `${text.slice(0, 117)}...` : text;
 }
@@ -595,7 +643,9 @@ function conversationActionsCountLabel(conversation) {
 }
 
 function conversationMessageCountLabel(conversation = {}) {
-  const count = Number(conversation.messageCount || conversation.messages?.length || 0);
+  const count = Number(
+    conversation.messageCount || conversation.messages?.length || 0,
+  );
   return `${count} message${count === 1 ? "" : "s"}`;
 }
 
@@ -617,14 +667,19 @@ function ConversationMap({
           coordinates: getConversationMapCoordinates(conversation),
         }))
         .filter((item) => item.coordinates),
-    [conversations]
+    [conversations],
   );
   const coordinatesKey = mappedConversations
     .map((item) => `${item.conversation.id}:${item.coordinates.join(",")}`)
     .join("|");
 
   useEffect(() => {
-    if (!token || !containerRef.current || mapRef.current || mappedConversations.length === 0) {
+    if (
+      !token ||
+      !containerRef.current ||
+      mapRef.current ||
+      mappedConversations.length === 0
+    ) {
       return undefined;
     }
 
@@ -641,11 +696,11 @@ function ConversationMap({
 
     map.addControl(
       new mapboxgl.AttributionControl({compact: true}),
-      "bottom-right"
+      "bottom-right",
     );
     map.addControl(
       new mapboxgl.NavigationControl({showCompass: false}),
-      "top-right"
+      "top-right",
     );
 
     map.dragRotate.disable();
@@ -672,40 +727,42 @@ function ConversationMap({
     if (!map) return undefined;
 
     markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = mappedConversations.map(({conversation, coordinates}) => {
-      const isActive = conversation.id === activeConversationId;
-      const marker = new mapboxgl.Marker({
-        anchor: "bottom",
-        color: isActive ? "#6e26f5" : "#253541",
-        scale: isActive ? 0.9 : 0.78,
-      })
-        .setLngLat(coordinates)
-        .addTo(map);
-      const markerElement = marker.getElement();
-      const selectConversation = () => onSelectConversation(conversation.id);
+    markersRef.current = mappedConversations.map(
+      ({conversation, coordinates}) => {
+        const isActive = conversation.id === activeConversationId;
+        const marker = new mapboxgl.Marker({
+          anchor: "bottom",
+          color: isActive ? "#6e26f5" : "#253541",
+          scale: isActive ? 0.9 : 0.78,
+        })
+          .setLngLat(coordinates)
+          .addTo(map);
+        const markerElement = marker.getElement();
+        const selectConversation = () => onSelectConversation(conversation.id);
 
-      markerElement.classList.add(styles.conversationMapMarker);
-      if (isActive) {
-        markerElement.classList.add(styles.conversationMapMarkerActive);
-      }
-      markerElement.title = conversationTitle(conversation);
-      markerElement.tabIndex = 0;
-      markerElement.setAttribute("role", "button");
-      markerElement.setAttribute("aria-current", isActive ? "true" : "false");
-      markerElement.setAttribute(
-        "aria-label",
-        `Open ${conversationTitle(conversation)}`
-      );
-      markerElement.addEventListener("click", selectConversation);
-      markerElement.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
+        markerElement.classList.add(styles.conversationMapMarker);
+        if (isActive) {
+          markerElement.classList.add(styles.conversationMapMarkerActive);
+        }
+        markerElement.title = conversationTitle(conversation);
+        markerElement.tabIndex = 0;
+        markerElement.setAttribute("role", "button");
+        markerElement.setAttribute("aria-current", isActive ? "true" : "false");
+        markerElement.setAttribute(
+          "aria-label",
+          `Open ${conversationTitle(conversation)}`,
+        );
+        markerElement.addEventListener("click", selectConversation);
+        markerElement.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
 
-        event.preventDefault();
-        selectConversation();
-      });
+          event.preventDefault();
+          selectConversation();
+        });
 
-      return marker;
-    });
+        return marker;
+      },
+    );
 
     if (mappedConversations.length === 1) {
       map.easeTo({
@@ -718,8 +775,8 @@ function ConversationMap({
         (nextBounds, item) => nextBounds.extend(item.coordinates),
         new mapboxgl.LngLatBounds(
           mappedConversations[0].coordinates,
-          mappedConversations[0].coordinates
-        )
+          mappedConversations[0].coordinates,
+        ),
       );
 
       map.fitBounds(bounds, {duration: 0, maxZoom: 8, padding: 54});
@@ -729,12 +786,17 @@ function ConversationMap({
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };
-  }, [activeConversationId, coordinatesKey, mappedConversations, onSelectConversation]);
+  }, [
+    activeConversationId,
+    coordinatesKey,
+    mappedConversations,
+    onSelectConversation,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
     const activeItem = mappedConversations.find(
-      (item) => item.conversation.id === activeConversationId
+      (item) => item.conversation.id === activeConversationId,
     );
 
     if (!map || !activeItem) return;
@@ -781,8 +843,8 @@ function Toast({toast, onClose}) {
     toast.type === "error"
       ? styles.toastError
       : toast.type === "warning"
-      ? styles.toastWarning
-      : styles.toastSuccess;
+        ? styles.toastWarning
+        : styles.toastSuccess;
 
   return (
     <button
@@ -883,7 +945,9 @@ function RegistrationSettingsPanel({settings, setSettings}) {
 
   function updateRegistration(updater) {
     setSettings((current) => {
-      const currentRegistration = normalizeRegistrationDraft(current.registration);
+      const currentRegistration = normalizeRegistrationDraft(
+        current.registration,
+      );
       return {
         ...current,
         registration: updater(currentRegistration),
@@ -988,7 +1052,7 @@ function EmbedModal({agent, onClose, onToast}) {
   const [copied, setCopied] = useState(false);
   const snippet = useMemo(
     () => buildEmbedSnippet({host, language, mode}),
-    [host, language, mode]
+    [host, language, mode],
   );
 
   useEffect(() => {
@@ -1080,7 +1144,7 @@ function EmbedModal({agent, onClose, onToast}) {
               )}
             </div>
             <div>
-              <strong>{agent.name || "Chatbot"}</strong>
+              <strong>{agent.name || DEFAULT_AGENT.name}</strong>
               <span>{normalizeEmbedHost(host)}</span>
             </div>
           </div>
@@ -1121,7 +1185,9 @@ function EmbedModal({agent, onClose, onToast}) {
 
           <div className={styles.embedSnippetShell}>
             <div className={styles.embedSnippetHeader}>
-              <span>{mode === "embedded" ? "Inline snippet" : "Launcher snippet"}</span>
+              <span>
+                {mode === "embedded" ? "Inline snippet" : "Launcher snippet"}
+              </span>
               <button
                 type="button"
                 className={styles.primaryButton}
@@ -1162,7 +1228,7 @@ function TokenUsageDashboardSection({busy, onRefresh, usage}) {
   const totalTokens = Number(totals.totalTokens) || 0;
   const maxMonthlyTokens = Math.max(
     ...monthly.map((bucket) => Number(bucket.totalTokens) || 0),
-    0
+    0,
   );
   const userShare = percentOf(totals.userTokens, totalTokens);
   const assistantShare = percentOf(totals.assistantTokens, totalTokens);
@@ -1177,14 +1243,14 @@ function TokenUsageDashboardSection({busy, onRefresh, usage}) {
       label: "Current month",
       value: formatNumber(totals.currentMonthTokens),
       detail: `${formatNumber(
-        totals.currentMonthConversationCount
+        totals.currentMonthConversationCount,
       )} conversations`,
     },
     {
       label: "Conversations",
       value: formatNumber(totals.conversationCount),
       detail: `${formatNumber(
-        totals.averageTokensPerConversation
+        totals.averageTokensPerConversation,
       )} tokens per conversation`,
     },
     {
@@ -1203,7 +1269,11 @@ function TokenUsageDashboardSection({busy, onRefresh, usage}) {
             Token usage across all stored chat conversations.
           </p>
         </div>
-        <button className={styles.ghostButton} onClick={onRefresh} disabled={busy}>
+        <button
+          className={styles.ghostButton}
+          onClick={onRefresh}
+          disabled={busy}
+        >
           <FiRefreshCw aria-hidden="true" />
           Refresh
         </button>
@@ -1276,7 +1346,10 @@ function TokenUsageDashboardSection({busy, onRefresh, usage}) {
                 const tokenCount = Number(bucket.totalTokens) || 0;
                 const width =
                   maxMonthlyTokens > 0
-                    ? Math.max(4, Math.round((tokenCount / maxMonthlyTokens) * 100))
+                    ? Math.max(
+                        4,
+                        Math.round((tokenCount / maxMonthlyTokens) * 100),
+                      )
                     : 0;
 
                 return (
@@ -1290,7 +1363,9 @@ function TokenUsageDashboardSection({busy, onRefresh, usage}) {
                 );
               })
             ) : (
-              <div className={styles.emptyState}>No token usage recorded yet.</div>
+              <div className={styles.emptyState}>
+                No token usage recorded yet.
+              </div>
             )}
           </div>
         </section>
@@ -1331,7 +1406,7 @@ function TokenUsageDashboardSection({busy, onRefresh, usage}) {
                 <span>{formatNumber(conversation.messageCount)}</span>
                 <span>
                   {formatDateTime(
-                    conversation.updated_at || conversation.created_at
+                    conversation.updated_at || conversation.created_at,
                   )}
                 </span>
               </div>
@@ -1357,7 +1432,9 @@ function AgentSettingsPanel({
   const namespaceSelectOptions = selectedNamespace
     ? [
         selectedNamespace,
-        ...namespaceOptions.filter((namespace) => namespace !== selectedNamespace),
+        ...namespaceOptions.filter(
+          (namespace) => namespace !== selectedNamespace,
+        ),
       ]
     : namespaceOptions;
   const namespaceDropdownOptions = [
@@ -1392,7 +1469,10 @@ function AgentSettingsPanel({
           className={styles.largeTextarea}
           value={settings.instruction || ""}
           onChange={(event) =>
-            setSettings((current) => ({...current, instruction: event.target.value}))
+            setSettings((current) => ({
+              ...current,
+              instruction: event.target.value,
+            }))
           }
         />
       </label>
@@ -1400,11 +1480,7 @@ function AgentSettingsPanel({
       <div className={styles.settingsGrid}>
         <label className={styles.field}>
           Model
-          <input
-            value={settings.model || ""}
-            readOnly
-            aria-readonly="true"
-          />
+          <input value={settings.model || ""} readOnly aria-readonly="true" />
         </label>
         <SelectField
           label="Namespace"
@@ -1467,7 +1543,10 @@ function AgentSettingsPanel({
             max="200"
             value={settings.top_k || 40}
             onChange={(event) =>
-              setSettings((current) => ({...current, top_k: Number(event.target.value)}))
+              setSettings((current) => ({
+                ...current,
+                top_k: Number(event.target.value),
+              }))
             }
           />
         </label>
@@ -1488,10 +1567,17 @@ function AgentSettingsPanel({
         </label>
       </div>
 
-      <RegistrationSettingsPanel settings={settings} setSettings={setSettings} />
+      <RegistrationSettingsPanel
+        settings={settings}
+        setSettings={setSettings}
+      />
 
       <div className={styles.integrationFooterActions}>
-        <button className={styles.primaryButton} onClick={onSave} disabled={saving}>
+        <button
+          className={styles.primaryButton}
+          onClick={onSave}
+          disabled={saving}
+        >
           <FiSave aria-hidden="true" />
           {saving ? "Saving..." : "Save"}
         </button>
@@ -1587,15 +1673,15 @@ function AgentSection({
 
   function removePrompt(index) {
     setChatPrompts((current) =>
-      current.filter((_, promptIndex) => promptIndex !== index)
+      current.filter((_, promptIndex) => promptIndex !== index),
     );
   }
 
   function togglePrompt(index, active) {
     setChatPrompts((current) =>
       current.map((prompt, promptIndex) =>
-        promptIndex === index ? {...prompt, active} : prompt
-      )
+        promptIndex === index ? {...prompt, active} : prompt,
+      ),
     );
   }
 
@@ -1629,13 +1715,17 @@ function AgentSection({
         ? input.selectionStart
         : null;
     const selectionEnd =
-      input && typeof input.selectionEnd === "number" ? input.selectionEnd : null;
+      input && typeof input.selectionEnd === "number"
+        ? input.selectionEnd
+        : null;
     const start =
       selectionStart === null
         ? currentText.length
         : Math.min(selectionStart, currentText.length);
     const end =
-      selectionEnd === null ? start : Math.min(selectionEnd, currentText.length);
+      selectionEnd === null
+        ? start
+        : Math.min(selectionEnd, currentText.length);
 
     return {
       nextCursor: start + token.length,
@@ -1664,7 +1754,7 @@ function AgentSection({
         starting_message: setLocalizedValue(
           current.starting_message,
           lang,
-          insertion.nextText
+          insertion.nextText,
         ),
       };
     });
@@ -1680,7 +1770,9 @@ function AgentSection({
   }
 
   function insertPromptToken(index, lang, fieldKey, refKey) {
-    const option = OWNER_PROFILE_FIELD_TOKENS.find((item) => item.key === fieldKey);
+    const option = OWNER_PROFILE_FIELD_TOKENS.find(
+      (item) => item.key === fieldKey,
+    );
     if (!option) return;
 
     const input = promptTextareaRefs.current[refKey];
@@ -1705,7 +1797,7 @@ function AgentSection({
             [lang]: insertion.nextText,
           },
         };
-      })
+      }),
     );
 
     requestAnimationFrame(() => {
@@ -1817,7 +1909,10 @@ function AgentSection({
                 <input
                   value={agent.name || ""}
                   onChange={(event) =>
-                    setAgent((current) => ({...current, name: event.target.value}))
+                    setAgent((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
                   }
                 />
               </label>
@@ -1827,7 +1922,10 @@ function AgentSection({
                 <input
                   value={agent.avatar || ""}
                   onChange={(event) =>
-                    setAgent((current) => ({...current, avatar: event.target.value}))
+                    setAgent((current) => ({
+                      ...current,
+                      avatar: event.target.value,
+                    }))
                   }
                 />
               </label>
@@ -1851,7 +1949,9 @@ function AgentSection({
                     className={`${styles.avatarChoice} ${
                       agent.avatar === avatar ? styles.avatarChoiceActive : ""
                     }`}
-                    onClick={() => setAgent((current) => ({...current, avatar}))}
+                    onClick={() =>
+                      setAgent((current) => ({...current, avatar}))
+                    }
                     title={avatar.split("/").pop()}
                   >
                     <video src={avatar} muted playsInline preload="metadata" />
@@ -1884,7 +1984,7 @@ function AgentSection({
                   )}
                 </div>
                 <div>
-                  <strong>{agent.name || "Chatbot"}</strong>
+                  <strong>{agent.name || DEFAULT_AGENT.name}</strong>
                   <span>Online</span>
                 </div>
               </div>
@@ -1897,7 +1997,7 @@ function AgentSection({
                 }}
               >
                 {localizedValue(agent.starting_message, "en") ||
-                  "How can I help today?"}
+                  localizedValue(DEFAULT_AGENT.starting_message, "en")}
               </div>
             </div>
           </div>
@@ -1929,7 +2029,7 @@ function AgentSection({
                       updateLocalizedAgentField(
                         "greeting",
                         language.code,
-                        event.target.value
+                        event.target.value,
                       )
                     }
                   />
@@ -1944,7 +2044,7 @@ function AgentSection({
                       onChange={(event) => {
                         insertStartingMessageToken(
                           language.code,
-                          event.target.value
+                          event.target.value,
                         );
                         event.target.value = "";
                       }}
@@ -1965,12 +2065,15 @@ function AgentSection({
                         delete startingMessageRefs.current[language.code];
                       }
                     }}
-                    value={localizedValue(agent.starting_message, language.code)}
+                    value={localizedValue(
+                      agent.starting_message,
+                      language.code,
+                    )}
                     onChange={(event) =>
                       updateLocalizedAgentField(
                         "starting_message",
                         language.code,
-                        event.target.value
+                        event.target.value,
                       )
                     }
                   />
@@ -2039,7 +2142,7 @@ function AgentSection({
                       const refKey = promptTextareaRefKey(
                         prompt,
                         index,
-                        language.code
+                        language.code,
                       );
 
                       return (
@@ -2055,7 +2158,7 @@ function AgentSection({
                                   index,
                                   language.code,
                                   event.target.value,
-                                  refKey
+                                  refKey,
                                 );
                                 event.target.value = "";
                               }}
@@ -2084,8 +2187,8 @@ function AgentSection({
                                   current,
                                   index,
                                   language.code,
-                                  event.target.value
-                                )
+                                  event.target.value,
+                                ),
                               )
                             }
                           />
@@ -2096,13 +2199,17 @@ function AgentSection({
                 </div>
               ))
             ) : (
-              <div className={styles.emptyState}>No chat prompts configured.</div>
+              <div className={styles.emptyState}>
+                No chat prompts configured.
+              </div>
             )}
           </div>
         </section>
 
         {isAgentReady ? (
-          <section className={`${styles.agentConfigSection} ${styles.agentUtilitySection}`}>
+          <section
+            className={`${styles.agentConfigSection} ${styles.agentUtilitySection}`}
+          >
             <div className={styles.sectionHeader}>
               <h2>Widget Embed</h2>
               <button
@@ -2134,8 +2241,7 @@ function SettingsSection({
   const [isIpGeolocationHelpOpen, setIsIpGeolocationHelpOpen] = useState(false);
   const [isMapboxHelpOpen, setIsMapboxHelpOpen] = useState(false);
   const isIpGeolocationConnected =
-    Boolean(system.ipGeolocationConfigured) &&
-    !system.clearIpGeolocationApiKey;
+    Boolean(system.ipGeolocationConfigured) && !system.clearIpGeolocationApiKey;
   const showIpGeolocationApiKeyField =
     !system.ipGeolocationConfigured ||
     Boolean(system.clearIpGeolocationApiKey) ||
@@ -2162,13 +2268,13 @@ function SettingsSection({
   const mailStatus = mail.active
     ? "Ready"
     : mail.enabled === false
-    ? "Disabled"
-    : "Needs config";
+      ? "Disabled"
+      : "Needs config";
   const mailStatusClass = mail.active
     ? styles.connectionChipConnected
     : mail.enabled === false
-    ? styles.connectionChipDisconnected
-    : styles.connectionChipError;
+      ? styles.connectionChipDisconnected
+      : styles.connectionChipError;
   const mailEditable = mail.provider !== "disabled";
 
   function setMailField(field, value) {
@@ -2182,7 +2288,8 @@ function SettingsSection({
   }
 
   function selectMailProvider(provider) {
-    const preset = MAIL_PROVIDER_PRESETS[provider] || MAIL_PROVIDER_PRESETS.custom;
+    const preset =
+      MAIL_PROVIDER_PRESETS[provider] || MAIL_PROVIDER_PRESETS.custom;
 
     setSystem((current) => {
       const currentMail = normalizeMailDraft(current.mail);
@@ -2191,7 +2298,8 @@ function SettingsSection({
         mail: {
           ...currentMail,
           provider,
-          enabled: provider === "disabled" ? false : currentMail.enabled !== false,
+          enabled:
+            provider === "disabled" ? false : currentMail.enabled !== false,
           host: preset.host,
           port: preset.port,
           secure: preset.secure,
@@ -2264,10 +2372,10 @@ function SettingsSection({
                     </button>
                   </div>
                   <p>
-                    Create an IPGeolocation.io account, copy an API key from
-                    the dashboard, then paste it here. The key is used
-                    server-side to store city, country, latitude, and longitude
-                    for conversations.
+                    Create an IPGeolocation.io account, copy an API key from the
+                    dashboard, then paste it here. The key is used server-side
+                    to store city, country, latitude, and longitude for
+                    conversations.
                   </p>
                   <a
                     href="https://app.ipgeolocation.io/dashboard"
@@ -2324,9 +2432,9 @@ function SettingsSection({
               {saving
                 ? "Saving..."
                 : system.clearIpGeolocationApiKey &&
-                  !system.ipGeolocationApiKey?.trim()
-                ? "Save disconnect"
-                : "Connect"}
+                    !system.ipGeolocationApiKey?.trim()
+                  ? "Save disconnect"
+                  : "Connect"}
             </button>
           ) : (
             <button
@@ -2439,8 +2547,8 @@ function SettingsSection({
               {saving
                 ? "Saving..."
                 : system.clearMapboxToken && !system.mapboxToken?.trim()
-                ? "Save disconnect"
-                : "Connect"}
+                  ? "Save disconnect"
+                  : "Connect"}
             </button>
           ) : (
             <button
@@ -2466,7 +2574,9 @@ function SettingsSection({
           <div className={styles.titleBlock}>
             <h2>Email delivery</h2>
           </div>
-          <div className={`${styles.sectionActions} ${styles.mailHeaderActions}`}>
+          <div
+            className={`${styles.sectionActions} ${styles.mailHeaderActions}`}
+          >
             <span className={`${styles.connectionChip} ${mailStatusClass}`}>
               {mailStatus}
             </span>
@@ -2479,7 +2589,9 @@ function SettingsSection({
               type="checkbox"
               checked={mail.enabled !== false && mail.provider !== "disabled"}
               disabled={mail.provider === "disabled"}
-              onChange={(event) => setMailField("enabled", event.target.checked)}
+              onChange={(event) =>
+                setMailField("enabled", event.target.checked)
+              }
             />
             New conversation notification emails
           </label>
@@ -2498,7 +2610,9 @@ function SettingsSection({
               <input
                 value={mail.fromName || ""}
                 disabled={!mailEditable}
-                onChange={(event) => setMailField("fromName", event.target.value)}
+                onChange={(event) =>
+                  setMailField("fromName", event.target.value)
+                }
                 placeholder="Krostewitz AI Agent"
               />
             </label>
@@ -2509,7 +2623,7 @@ function SettingsSection({
                 value={mail.from || ""}
                 disabled={!mailEditable}
                 onChange={(event) => setMailField("from", event.target.value)}
-                placeholder="mathias@krostewitz.com"
+                placeholder="Jon@krostewitz.com"
               />
             </label>
             <label className={styles.field}>
@@ -2518,7 +2632,9 @@ function SettingsSection({
                 type="email"
                 value={mail.replyTo || ""}
                 disabled={!mailEditable}
-                onChange={(event) => setMailField("replyTo", event.target.value)}
+                onChange={(event) =>
+                  setMailField("replyTo", event.target.value)
+                }
                 placeholder="Optional"
               />
             </label>
@@ -2533,7 +2649,7 @@ function SettingsSection({
               onChange={(event) =>
                 setMailField("recipients", textToRecipients(event.target.value))
               }
-              placeholder="mathias@krostewitz.com"
+              placeholder="Jon@krostewitz.com"
             />
           </label>
 
@@ -2555,7 +2671,9 @@ function SettingsSection({
                 max="65535"
                 value={mail.port || 587}
                 disabled={!mailEditable}
-                onChange={(event) => setMailField("port", Number(event.target.value))}
+                onChange={(event) =>
+                  setMailField("port", Number(event.target.value))
+                }
               />
             </label>
             <label className={styles.field}>
@@ -2563,8 +2681,10 @@ function SettingsSection({
               <input
                 value={mail.username || ""}
                 disabled={!mailEditable}
-                onChange={(event) => setMailField("username", event.target.value)}
-                placeholder="mathias@krostewitz.com"
+                onChange={(event) =>
+                  setMailField("username", event.target.value)
+                }
+                placeholder="Jon@krostewitz.com"
                 autoComplete="username"
               />
             </label>
@@ -2602,7 +2722,9 @@ function SettingsSection({
                 type="checkbox"
                 checked={Boolean(mail.requireTLS)}
                 disabled={!mailEditable}
-                onChange={(event) => setMailField("requireTLS", event.target.checked)}
+                onChange={(event) =>
+                  setMailField("requireTLS", event.target.checked)
+                }
               />
               Require STARTTLS
             </label>
@@ -2611,7 +2733,9 @@ function SettingsSection({
                 type="checkbox"
                 checked={Boolean(mail.secure)}
                 disabled={!mailEditable}
-                onChange={(event) => setMailField("secure", event.target.checked)}
+                onChange={(event) =>
+                  setMailField("secure", event.target.checked)
+                }
               />
               Use direct TLS
             </label>
@@ -2700,7 +2824,11 @@ function KnowledgeSection({
         <div className={styles.titleBlock}>
           <h1>Knowledge</h1>
         </div>
-        <button className={styles.ghostButton} onClick={onRefresh} disabled={busy}>
+        <button
+          className={styles.ghostButton}
+          onClick={onRefresh}
+          disabled={busy}
+        >
           <FiRefreshCw aria-hidden="true" />
           Refresh
         </button>
@@ -2800,7 +2928,9 @@ function KnowledgeSection({
         </div>
         {documents.map((document) => (
           <div key={document.id} className={styles.documentRow}>
-            <strong title={document.source}>{document.title || document.source}</strong>
+            <strong title={document.source}>
+              {document.title || document.source}
+            </strong>
             <span>{document.namespace}</span>
             <span>{document.type}</span>
             <span>{document.chunks}</span>
@@ -2847,7 +2977,7 @@ function ConversationsSection({
       conversations.find((conversation) => conversation.id === activeId) ||
       conversations[0] ||
       null,
-    [activeId, conversations]
+    [activeId, conversations],
   );
   const activeActions = conversationActions(activeConversation || {});
   const activeMessages = Array.isArray(activeConversation?.messages)
@@ -2855,8 +2985,8 @@ function ConversationsSection({
     : [];
   const hasDetailChanges = Boolean(
     activeConversation &&
-      (statusDraft !== (activeConversation.status || "open") ||
-        notesDraft !== (activeConversation.notes || ""))
+    (statusDraft !== (activeConversation.status || "open") ||
+      notesDraft !== (activeConversation.notes || "")),
   );
   const hasActionDraft = Boolean(actionDraft.trim());
 
@@ -2941,28 +3071,44 @@ function ConversationsSection({
         <div className={styles.titleBlock}>
           <h1>Conversations</h1>
           <p className={styles.muted}>
-            Review visitor chats, tracking details, notes, and follow-up actions.
+            Review visitor chats, tracking details, notes, and follow-up
+            actions.
           </p>
         </div>
-        <button className={styles.ghostButton} onClick={onRefresh} disabled={busy}>
+        <button
+          className={styles.ghostButton}
+          onClick={onRefresh}
+          disabled={busy}
+        >
           <FiRefreshCw aria-hidden="true" />
           Refresh
         </button>
       </div>
 
-      <div className={styles.conversationStats} aria-label="Conversation filters">
+      <div
+        className={styles.conversationStats}
+        aria-label="Conversation filters"
+      >
         {[
           {
             value: "",
             label: "total",
             count: Object.values(counts || {}).reduce(
               (total, value) => total + (Number(value) || 0),
-              0
+              0,
             ),
           },
           {value: "open", label: "open", count: counts.open || 0},
-          {value: "reviewing", label: "reviewing", count: counts.reviewing || 0},
-          {value: "qualified", label: "qualified", count: counts.qualified || 0},
+          {
+            value: "reviewing",
+            label: "reviewing",
+            count: counts.reviewing || 0,
+          },
+          {
+            value: "qualified",
+            label: "qualified",
+            count: counts.qualified || 0,
+          },
           {value: "closed", label: "closed", count: counts.closed || 0},
           {value: "spam", label: "spam", count: counts.spam || 0},
         ].map((chip) => (
@@ -2970,10 +3116,14 @@ function ConversationsSection({
             key={chip.value || "total"}
             type="button"
             className={`${styles.conversationStatChip} ${
-              filter.status === chip.value ? styles.conversationStatChipActive : ""
+              filter.status === chip.value
+                ? styles.conversationStatChipActive
+                : ""
             }`}
             aria-pressed={filter.status === chip.value}
-            onClick={() => setFilter((current) => ({...current, status: chip.value}))}
+            onClick={() =>
+              setFilter((current) => ({...current, status: chip.value}))
+            }
           >
             {chip.count} {chip.label}
           </button>
@@ -3032,43 +3182,45 @@ function ConversationsSection({
               <span>Updated</span>
             </div>
 
-          {conversations.map((conversation) => (
-            <button
-              key={conversation.id}
-              type="button"
-              className={`${styles.conversationListRow} ${
-                activeConversation?.id === conversation.id
-                  ? styles.conversationListRowActive
-                  : ""
-              }`}
-              onClick={() => openConversationDetails(conversation.id)}
-            >
-              <span className={styles.conversationIdentity}>
-                <strong>{conversationTitle(conversation)}</strong>
-                <small>{conversationContactLine(conversation)}</small>
-              </span>
-              <span className={styles.statusBadge}>
-                {CONVERSATION_STATUS_LABELS[conversation.status] ||
-                  conversation.status ||
-                  "Open"}
-              </span>
-              <span className={styles.conversationMessageSummary}>
-                <strong>{conversationMessageCountLabel(conversation)}</strong>
-                <small>{conversation.preview || "No messages"}</small>
-              </span>
-              <span className={styles.conversationActivityPreview}>
-                <strong>{conversationActionsCountLabel(conversation)}</strong>
-                <small>{conversationActionsPreview(conversation)}</small>
-              </span>
-              <span className={styles.conversationTime}>
-                {formatDateTime(conversation.updated_at || conversation.created_at)}
-              </span>
-            </button>
-          ))}
+            {conversations.map((conversation) => (
+              <button
+                key={conversation.id}
+                type="button"
+                className={`${styles.conversationListRow} ${
+                  activeConversation?.id === conversation.id
+                    ? styles.conversationListRowActive
+                    : ""
+                }`}
+                onClick={() => openConversationDetails(conversation.id)}
+              >
+                <span className={styles.conversationIdentity}>
+                  <strong>{conversationTitle(conversation)}</strong>
+                  <small>{conversationContactLine(conversation)}</small>
+                </span>
+                <span className={styles.statusBadge}>
+                  {CONVERSATION_STATUS_LABELS[conversation.status] ||
+                    conversation.status ||
+                    "Open"}
+                </span>
+                <span className={styles.conversationMessageSummary}>
+                  <strong>{conversationMessageCountLabel(conversation)}</strong>
+                  <small>{conversation.preview || "No messages"}</small>
+                </span>
+                <span className={styles.conversationActivityPreview}>
+                  <strong>{conversationActionsCountLabel(conversation)}</strong>
+                  <small>{conversationActionsPreview(conversation)}</small>
+                </span>
+                <span className={styles.conversationTime}>
+                  {formatDateTime(
+                    conversation.updated_at || conversation.created_at,
+                  )}
+                </span>
+              </button>
+            ))}
 
-          {conversations.length === 0 ? (
-            <div className={styles.emptyState}>No conversations found.</div>
-          ) : null}
+            {conversations.length === 0 ? (
+              <div className={styles.emptyState}>No conversations found.</div>
+            ) : null}
           </div>
         </section>
       </div>
@@ -3111,7 +3263,7 @@ function ConversationsSection({
                         <option key={status.value} value={status.value}>
                           {status.label}
                         </option>
-                      )
+                      ),
                     )}
                   </select>
                 </label>
@@ -3148,35 +3300,51 @@ function ConversationsSection({
               <div className={styles.conversationDetailGrid}>
                 <div>
                   <span>Email</span>
-                  <strong>{activeConversation.user?.email || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.email || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Phone</span>
-                  <strong>{activeConversation.user?.phone || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.phone || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Company</span>
-                  <strong>{activeConversation.user?.company || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.company || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Visitor address</span>
-                  <strong>{activeConversation.user?.address || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.address || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>City</span>
-                  <strong>{activeConversation.user?.city || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.city || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Region</span>
-                  <strong>{activeConversation.user?.region || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.region || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Postal code</span>
-                  <strong>{activeConversation.user?.postal_code || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.postal_code || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Country</span>
-                  <strong>{activeConversation.user?.country || "Not provided"}</strong>
+                  <strong>
+                    {activeConversation.user?.country || "Not provided"}
+                  </strong>
                 </div>
                 <div>
                   <span>Source</span>
@@ -3184,22 +3352,30 @@ function ConversationsSection({
                 </div>
                 <div>
                   <span>Created</span>
-                  <strong>{formatDateTime(activeConversation.created_at)}</strong>
+                  <strong>
+                    {formatDateTime(activeConversation.created_at)}
+                  </strong>
                 </div>
                 <div>
                   <span>Updated</span>
-                  <strong>{formatDateTime(activeConversation.updated_at)}</strong>
+                  <strong>
+                    {formatDateTime(activeConversation.updated_at)}
+                  </strong>
                 </div>
                 <div>
                   <span>Messages</span>
-                  <strong>{conversationMessageCountLabel(activeConversation)}</strong>
+                  <strong>
+                    {conversationMessageCountLabel(activeConversation)}
+                  </strong>
                 </div>
               </div>
 
               <div className={styles.conversationTrackingGrid}>
                 <div>
                   <span>IP</span>
-                  <strong>{activeConversation.tracking?.ip || "Unknown"}</strong>
+                  <strong>
+                    {activeConversation.tracking?.ip || "Unknown"}
+                  </strong>
                 </div>
                 <div>
                   <span>Country</span>
@@ -3219,7 +3395,9 @@ function ConversationsSection({
                 </div>
                 <div>
                   <span>Address</span>
-                  <strong>{normalizeLocation(activeConversation.tracking)}</strong>
+                  <strong>
+                    {normalizeLocation(activeConversation.tracking)}
+                  </strong>
                 </div>
                 <div className={styles.conversationWideDetail}>
                   <span>Page</span>
@@ -3231,7 +3409,9 @@ function ConversationsSection({
                 </div>
                 <div className={styles.conversationWideDetail}>
                   <span>User agent</span>
-                  <strong>{activeConversation.tracking?.userAgent || "Unknown"}</strong>
+                  <strong>
+                    {activeConversation.tracking?.userAgent || "Unknown"}
+                  </strong>
                 </div>
               </div>
 
@@ -3250,9 +3430,14 @@ function ConversationsSection({
                 <div className={styles.conversationActivityComposerHeader}>
                   <div>
                     <h3>Lead activity</h3>
-                    <p>Log each touchpoint so follow-ups, calls, emails, and qualification work stay traceable.</p>
+                    <p>
+                      Log each touchpoint so follow-ups, calls, emails, and
+                      qualification work stay traceable.
+                    </p>
                   </div>
-                  <span>{conversationActionsCountLabel(activeConversation)}</span>
+                  <span>
+                    {conversationActionsCountLabel(activeConversation)}
+                  </span>
                 </div>
 
                 <div className={styles.conversationActionDraftGrid}>
@@ -3285,7 +3470,9 @@ function ConversationsSection({
               <div className={styles.conversationActionSection}>
                 <div className={styles.conversationSectionHeader}>
                   <h3>Action history</h3>
-                  <span>{conversationActionsCountLabel(activeConversation)}</span>
+                  <span>
+                    {conversationActionsCountLabel(activeConversation)}
+                  </span>
                 </div>
 
                 {activeActions.length > 0 ? (
@@ -3318,7 +3505,9 @@ function ConversationsSection({
               <div className={styles.conversationTranscriptSection}>
                 <div className={styles.conversationSectionHeader}>
                   <h3>Messages</h3>
-                  <span>{conversationMessageCountLabel(activeConversation)}</span>
+                  <span>
+                    {conversationMessageCountLabel(activeConversation)}
+                  </span>
                 </div>
                 <div className={styles.messageList}>
                   {activeMessages.map((message, index) => (
@@ -3358,7 +3547,10 @@ export default function AdminDashboard({user}) {
   const [documents, setDocuments] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [conversationCounts, setConversationCounts] = useState({});
-  const [conversationFilter, setConversationFilter] = useState({status: "", q: ""});
+  const [conversationFilter, setConversationFilter] = useState({
+    status: "",
+    q: "",
+  });
   const [tokenUsage, setTokenUsage] = useState(DEFAULT_TOKEN_USAGE);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
@@ -3369,10 +3561,10 @@ export default function AdminDashboard({user}) {
         ...new Set(
           documents
             .map((document) => String(document.namespace || "").trim())
-            .filter(Boolean)
+            .filter(Boolean),
         ),
       ].sort((left, right) => left.localeCompare(right)),
-    [documents]
+    [documents],
   );
 
   function showToast(type, message) {
@@ -3422,10 +3614,13 @@ export default function AdminDashboard({user}) {
 
   async function loadConversations() {
     const params = new URLSearchParams();
-    if (conversationFilter.status) params.set("status", conversationFilter.status);
+    if (conversationFilter.status)
+      params.set("status", conversationFilter.status);
     if (conversationFilter.q) params.set("q", conversationFilter.q);
     const query = params.toString();
-    const data = await fetchJson(`/api/admin/conversations${query ? `?${query}` : ""}`);
+    const data = await fetchJson(
+      `/api/admin/conversations${query ? `?${query}` : ""}`,
+    );
     setConversations(data.conversations || []);
     setConversationCounts(data.counts || {});
   }
@@ -3440,20 +3635,17 @@ export default function AdminDashboard({user}) {
   }
 
   useEffect(() => {
-    void runTask(
-      async () => {
-        await Promise.all([
-          loadAgent(),
-          loadChatPrompts(),
-          loadSettings(),
-          loadSystem(),
-          loadDocuments(),
-          loadConversations(),
-          loadTokenUsage(),
-        ]);
-      },
-      ""
-    );
+    void runTask(async () => {
+      await Promise.all([
+        loadAgent(),
+        loadChatPrompts(),
+        loadSettings(),
+        loadSystem(),
+        loadDocuments(),
+        loadConversations(),
+        loadTokenUsage(),
+      ]);
+    }, "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3518,7 +3710,9 @@ export default function AdminDashboard({user}) {
         method: "POST",
         body: JSON.stringify({}),
       });
-      const accepted = Array.isArray(result.accepted) ? result.accepted.length : 0;
+      const accepted = Array.isArray(result.accepted)
+        ? result.accepted.length
+        : 0;
 
       return accepted;
     }, "Test email sent.");
@@ -3578,19 +3772,25 @@ export default function AdminDashboard({user}) {
 
   async function saveConversation(conversationId, patch) {
     await runTask(async () => {
-      await fetchJson(`/api/admin/conversations/${encodeURIComponent(conversationId)}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      });
+      await fetchJson(
+        `/api/admin/conversations/${encodeURIComponent(conversationId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        },
+      );
       await loadConversations();
     }, "Conversation saved.");
   }
 
   async function deleteConversation(conversationId) {
     await runTask(async () => {
-      await fetchJson(`/api/admin/conversations/${encodeURIComponent(conversationId)}`, {
-        method: "DELETE",
-      });
+      await fetchJson(
+        `/api/admin/conversations/${encodeURIComponent(conversationId)}`,
+        {
+          method: "DELETE",
+        },
+      );
       await loadConversations();
       await loadTokenUsage();
     }, "Conversation deleted.");
@@ -3617,16 +3817,20 @@ export default function AdminDashboard({user}) {
               updated === 1 ? "" : "s"
             } from ${lookedUp} stored IP lookup${lookedUp === 1 ? "" : "s"}.`
           : lookedUp > 0
-          ? `No conversation locations changed after ${lookedUp} stored IP lookup${
-              lookedUp === 1 ? "" : "s"
-            }.`
-          : "No stored conversation IPs need geolocation.";
+            ? `No conversation locations changed after ${lookedUp} stored IP lookup${
+                lookedUp === 1 ? "" : "s"
+              }.`
+            : "No stored conversation IPs need geolocation.";
 
       showToast(
-        failed > 0 && updated === 0 ? "error" : failed > 0 ? "warning" : "success",
+        failed > 0 && updated === 0
+          ? "error"
+          : failed > 0
+            ? "warning"
+            : "success",
         failed > 0
           ? `${baseMessage} ${failed} lookup${failed === 1 ? "" : "s"} failed.`
-          : baseMessage
+          : baseMessage,
       );
     } catch (error) {
       showToast("error", error.message);

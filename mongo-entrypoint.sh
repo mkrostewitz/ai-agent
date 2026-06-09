@@ -100,33 +100,60 @@ const defaultQuestionsCollection = env.MONGODB_DEFAULT_QUESTIONS_COLLECTION || "
 const chatbotCollection = env.MONGODB_CHATBOT_COLLECTION || "chatbot";
 const settingsCollection = env.MONGODB_SETTINGS_COLLECTION || "settings";
 const fallbackLocale = env.I18N_FALLBACK_LOCALE || "en";
+
+const deploymentStandardInstruction = [
+  "Answer as a professional personal assistant for Jon Doe.",
+  "Use the uploaded CVs, resumes, indexed website data, and AI Chat Knowledge Base as the source of truth.",
+  "Use the AI Chat Knowledge Base for positioning, tone, preferred wording, IN2TEC, Schlegel, roles, availability, and contact guidance.",
+  "Use the CVs and resumes for facts, dates, roles, companies, markets, industries, and achievements.",
+  "Answer naturally and professionally. Do not answer with only a bare list unless the user specifically asks for a list.",
+  [
+    "For most answers:",
+    "* Start with one direct sentence.",
+    "* Add 2 to 4 useful details.",
+    "* Keep the answer concise but complete.",
+  ].join("\n"),
+  "For background and career questions, answer in reverse chronological order: current roles first, then recent prior roles.",
+  "For broad background answers, include the current/latest organization(s) plus the next three distinct prior organizations when relevant.",
+  "Mention early-career roles only when directly relevant or explicitly requested.",
+  "Position Jon as a hands-on business builder, market-entry specialist, and entrepreneurial operator who connects strategy, sales, operations, leadership, and digital systems.",
+  "Do not make Jon sound like a pure consultant, pure software developer, or someone focused only on U.S. market entry.",
+  "Do not suggest long-term relocation to the U.S. or China. Jon is based in Germany, open to frequent international travel, and open to temporary project assignments.",
+  "Use only the provided context. If the answer is not available, say so briefly and suggest contacting Jon.",
+  "When a visitor wants to get in touch, offer the configured contact email/contact section or forward a contact request if visitor details are available.",
+].join("\n\n");
+
 const seedDefaults = [
   {
     order: 1,
     translations: {
-      en: "Tell me more about your background?",
-      de: "Erzähl mir mehr über deinen Hintergrund.",
+      en: "Tell me about {{OwnerFirstName}}.",
+      de: "Erzähl mir mehr über {{OwnerFirstName}}.",
+      it: "Raccontami di {{OwnerFirstName}}.",
     },
   },
   {
     order: 2,
     translations: {
-      en: "How can you help my Company?",
-      de: "Wie kannst du meinem Unternehmen helfen?",
+      en: "How can {{OwnerFirstName}} support my company?",
+      de: "Wie kann {{OwnerFirstName}} mein Unternehmen unterstützen?",
+      it: "Come può supportare la mia azienda, {{OwnerFirstName}}?",
     },
   },
   {
     order: 3,
     translations: {
-      en: "What markets & industries you are fond of?",
-      de: "Für welche Märkte und Branchen interessierst du dich?",
+      en: "Where does {{OwnerFirstName}} have experience?",
+      de: "Wo hat {{OwnerFirstName}} Erfahrung?",
+      it: "Dove ha esperienza {{OwnerFirstName}}?",
     },
   },
   {
     order: 4,
     translations: {
-      en: "How do you engage?",
-      de: "Wie gehst du vor?",
+      en: "What is {{OwnerFirstName}} looking for?",
+      de: "Was sucht {{OwnerFirstName}} beruflich?",
+      it: "Cosa cerca {{OwnerFirstName}} professionalmente?",
     },
   },
 ];
@@ -175,20 +202,32 @@ const chatbotCount = chatbotCol.estimatedDocumentCount();
 if (chatbotCount === 0) {
   chatbotCol.insertOne({
     _id: ObjectId("6945708d17667ce0fa13e361"),
-    name: "Friendly Bot",
-    avatar: "/avatars/Emily_Intro.mp4",
+    name: "Michaela",
+    owner_profile: {
+      type: "person",
+      first_name: "Jon",
+      last_name: "Krostewitz",
+      company_name: "",
+    },
+    avatar: "/avatars/Michelle_Intro.mp4",
     primary_color: "#6e26f5",
     secondary_color: "#0e273d",
     button_color: "#6e26f5",
     greeting: [
-      {lang: "en", text: "Hi there!"},
-      {lang: "de", text: "Hallo!"},
-      {lang: "it", text: "Ciao!"},
+      {lang: "en", text: "Hi there, I am Michaela!"},
+      {lang: "de", text: "Hallo, Michaela hier!"},
+      {lang: "it", text: "Ciao, sono Michaela."},
     ],
     starting_message: [
-      {lang: "en", text: "How can I help today?"},
-      {lang: "de", text: "Wie kann ich heute helfen?"},
-      {lang: "it", text: "Come posso aiutarti oggi?"},
+      {
+        lang: "en",
+        text: "Hi {{FName}}, I am Michaela, the AI assistant for Jon. How can I help today?",
+      },
+      {
+        lang: "de",
+        text: "Hallo {{FName}}, ich bin die KI Assistentin von Jon. Wie kann ich dir heute helfen?",
+      },
+      {lang: "it", text: "Ciao, {{FName}}, come posso aiutarti oggi?"},
     ],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -203,13 +242,25 @@ const settingsCol = appDb.getCollection(settingsCollection);
 const settingsCount = settingsCol.estimatedDocumentCount();
 if (settingsCount === 0) {
   settingsCol.insertOne({
-    instruction:
-      "Answer as a professional personal assistant for the person configured during setup.\n- Use uploaded CVs, resumes, and indexed website data as the source of truth.\n- For background and career questions, answer in reverse chronological order: current/latest positions first, then the next most recent roles.\n- For broad background answers, include the current/latest organization(s) plus the next three distinct prior organizations when they are present in the CV context.\n- Do not skip from a current role to much older roles when newer intermediate roles are present in the context.\n- Mention older early-career employers only when they are directly relevant or explicitly requested.\n- Use only the provided context; if the answer is not there, say you don't know.\n- Respond concisely with natural, professional wording.",
+    instruction: deploymentStandardInstruction,
     model: env.OLLAMA_MODEL || "phi3:mini",
     temperature: 0.2,
     max_tokens: 2000,
     top_k: 40,
     top_p: 0.9,
+    namespace: "",
+    retrieval_k: 6,
+    registration: {
+      enabled: true,
+      fields: {
+        first_name: {show: true, required: true},
+        last_name: {show: true, required: true},
+        phone: {show: true, required: false},
+        email: {show: true, required: true},
+        company: {show: false, required: false},
+        address: {show: false, required: false},
+      },
+    },
     createdAt: new Date(),
     updatedAt: new Date(),
   });
