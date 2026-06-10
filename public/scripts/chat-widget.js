@@ -694,21 +694,28 @@
       media.crossOrigin = "anonymous";
     }
     if (isVideo) {
+      media.defaultMuted = true;
       media.muted = true;
       media.autoplay = Boolean(opts.autoplayVideo);
       media.loop = Boolean(opts.autoplayVideo);
       media.playsInline = true;
       media.controls = false;
+      media.disablePictureInPicture = true;
       media.preload = "auto";
+      media.volume = 0;
       media.setAttribute("aria-label", alt || "Michaela");
       media.setAttribute("playsinline", "true");
+      media.setAttribute("webkit-playsinline", "true");
       media.setAttribute("muted", "true");
+      media.setAttribute("disablepictureinpicture", "true");
       if (opts.autoplayVideo) {
         media.setAttribute("autoplay", "true");
-        media.addEventListener("loadeddata", function () {
-          if (typeof media.play === "function") {
-            media.play().catch(function () {});
-          }
+        media.addEventListener("loadedmetadata", requestAvatarVideoPlayback);
+        media.addEventListener("loadeddata", requestAvatarVideoPlayback);
+        media.addEventListener("canplay", requestAvatarVideoPlayback);
+      } else {
+        media.addEventListener("loadedmetadata", function () {
+          primePausedAvatarFrame(media);
         });
       }
     } else {
@@ -718,7 +725,55 @@
       media.fetchPriority = "high";
     }
     media.src = resolvedSrc;
+    if (isVideo) {
+      primeAvatarVideo(media);
+    }
     return media;
+
+    function requestAvatarVideoPlayback() {
+      playAvatarVideo(media);
+    }
+  }
+
+  function playAvatarVideo(media) {
+    if (!media || media.tagName !== "VIDEO" || typeof media.play !== "function") {
+      return;
+    }
+
+    const playback = media.play();
+    if (playback && typeof playback.catch === "function") {
+      playback.catch(function () {});
+    }
+  }
+
+  function primePausedAvatarFrame(media) {
+    if (!media || media.tagName !== "VIDEO") return;
+    if (media.dataset.avatarFramePrimed === "true") return;
+
+    try {
+      const duration = Number(media.duration);
+      if (Number.isFinite(duration) && duration > 0 && media.currentTime < 0.01) {
+        media.currentTime = Math.min(0.05, duration / 2);
+      }
+      media.dataset.avatarFramePrimed = "true";
+    } catch (e) {}
+  }
+
+  function primeAvatarVideo(media) {
+    if (!media || media.tagName !== "VIDEO") return;
+
+    if (typeof media.load === "function") {
+      media.load();
+    }
+
+    if (media.dataset.avatarAutoplay === "true") {
+      playAvatarVideo(media);
+      return;
+    }
+
+    if (media.readyState >= 1) {
+      primePausedAvatarFrame(media);
+    }
   }
 
   function avatarMediaReady(media) {
@@ -910,7 +965,23 @@
     setAvatarMedia(toastAvatar, src, alt, ".toast-online", {
       autoplayVideo: false,
     });
+    setTimeout(primeMountedAvatarVideos, 250);
+    setTimeout(primeMountedAvatarVideos, 1000);
   }
+
+  function primeMountedAvatarVideos() {
+    [avatar, headerAvatar, toastAvatar].forEach(function (container) {
+      const video = container.querySelector("video");
+      if (video) primeAvatarVideo(video);
+    });
+  }
+
+  ["touchstart", "pointerdown"].forEach(function (eventName) {
+    document.addEventListener(eventName, primeMountedAvatarVideos, {
+      capture: true,
+      passive: true,
+    });
+  });
 
   const userOverlay = document.createElement("div");
   userOverlay.className = "chat-user-overlay hidden";
@@ -2404,6 +2475,7 @@
 
   if (mode === "modal") {
     launcher.addEventListener("click", function () {
+      primeMountedAvatarVideos();
       toggleModal(!state.open);
       if (state.open) {
         clearLauncherNudgeTimers();
@@ -2413,6 +2485,7 @@
     });
 
     closeBtn.addEventListener("click", function () {
+      primeMountedAvatarVideos();
       toggleModal(false);
       scheduleLauncherNudge();
     });

@@ -148,10 +148,20 @@ function AgentAvatar({agent}) {
         aria-label={label}
         className="h-8 w-8 rounded-full object-cover bg-gray-700 sm:h-9 sm:w-9"
         muted
+        defaultMuted
         autoPlay
         loop
         playsInline
         preload="auto"
+        disablePictureInPicture
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget;
+          video.muted = true;
+          const playback = video.play();
+          if (playback && typeof playback.catch === "function") {
+            playback.catch(() => {});
+          }
+        }}
         onError={() => setFailed(true)}
       />
     );
